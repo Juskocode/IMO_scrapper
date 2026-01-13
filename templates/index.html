@@ -11,6 +11,8 @@
     .mono { font-variant-numeric: tabular-nums; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace; }
     .small-note { color: #666; font-size: 0.9rem; }
     table td { vertical-align: middle; }
+    table thead th { position: sticky; top: 0; background: var(--bs-body-bg); z-index: 1; }
+    .badge-source { text-transform: uppercase; letter-spacing: .02em; }
   </style>
 </head>
 <body>
@@ -61,6 +63,7 @@
           <div class="form-check"><input class="form-check-input source" type="checkbox" value="supercasa" checked> <label class="form-check-label">SUPERCASA</label></div>
           <div class="form-check"><input class="form-check-input source" type="checkbox" value="casasapo" checked> <label class="form-check-label">CASA SAPO</label></div>
           <div class="form-check"><input class="form-check-input source" type="checkbox" value="remax" checked> <label class="form-check-label">RE/MAX</label></div>
+          <div class="form-check"><input class="form-check-input source" type="checkbox" value="olx" checked> <label class="form-check-label">OLX</label></div>
         </div>
       </div>
 
@@ -154,82 +157,112 @@
       return Array.from(document.querySelectorAll(".source:checked")).map(x => x.value);
     }
 
+    function sourceBadgeClass(src) {
+      switch ((src || '').toLowerCase()) {
+        case 'idealista': return 'warning';
+        case 'imovirtual': return 'info';
+        case 'supercasa': return 'primary';
+        case 'casasapo': return 'secondary';
+        case 'remax': return 'danger';
+        case 'olx': return 'success';
+        default: return 'dark';
+      }
+    }
+    function sourceBadge(src) {
+      const cls = sourceBadgeClass(src);
+      return `<span class="badge rounded-pill text-bg-${cls} badge-source">${src}</span>`;
+    }
+
     async function refresh() {
-      const params = new URLSearchParams();
-      params.set("district", document.getElementById("district").value);
-      params.set("pages", document.getElementById("pages").value);
-      params.set("limit", document.getElementById("limit").value);
-      params.set("sort", document.getElementById("sort").value);
+      const btn = document.getElementById('btnRefresh');
+      const oldBtnHTML = btn.innerHTML;
+      btn.disabled = true;
+      btn.innerHTML = '<span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>A carregar…';
 
-      const min_price = document.getElementById("min_price").value.trim();
-      const max_price = document.getElementById("max_price").value.trim();
-      const min_area  = document.getElementById("min_area").value.trim();
-      const max_area  = document.getElementById("max_area").value.trim();
-      if (min_price) params.set("min_price", min_price);
-      if (max_price) params.set("max_price", max_price);
-      if (min_area) params.set("min_area", min_area);
-      if (max_area) params.set("max_area", max_area);
+      try {
+        const params = new URLSearchParams();
+        params.set("district", document.getElementById("district").value);
+        params.set("pages", document.getElementById("pages").value);
+        params.set("limit", document.getElementById("limit").value);
+        params.set("sort", document.getElementById("sort").value);
 
-      params.set("only_with_eurm2", document.getElementById("only_with_eurm2").checked ? "1" : "0");
-      params.set("exclude_temporary", document.getElementById("exclude_temporary").checked ? "1" : "0");
+        const min_price = document.getElementById("min_price").value.trim();
+        const max_price = document.getElementById("max_price").value.trim();
+        const min_area  = document.getElementById("min_area").value.trim();
+        const max_area  = document.getElementById("max_area").value.trim();
+        if (min_price) params.set("min_price", min_price);
+        if (max_price) params.set("max_price", max_price);
+        if (min_area) params.set("min_area", min_area);
+        if (max_area) params.set("max_area", max_area);
 
-      for (const s of selectedSources()) params.append("sources", s);
+        params.set("only_with_eurm2", document.getElementById("only_with_eurm2").checked ? "1" : "0");
+        params.set("exclude_temporary", document.getElementById("exclude_temporary").checked ? "1" : "0");
 
-      document.getElementById("summary").textContent = "A carregar…";
+        for (const s of selectedSources()) params.append("sources", s);
 
-      const res = await fetch("/api/listings?" + params.toString());
-      const data = await res.json();
+        document.getElementById("summary").textContent = "A carregar…";
 
-      document.getElementById("summary").textContent =
-        `${data.stats.count} resultados • mediana €/m²: ${data.stats.median_eur_m2 ? num(data.stats.median_eur_m2) : "—"}`;
+        const res = await fetch("/api/listings?" + params.toString());
+        if (!res.ok) throw new Error('Erro a carregar dados');
+        const data = await res.json();
 
-      const tbody = document.getElementById("tbody");
-      tbody.innerHTML = "";
-      for (const x of data.results) {
-        const tr = document.createElement("tr");
-        tr.innerHTML = `
-          <td class="mono">${x.source}</td>
-          <td>${(x.title || "—")}</td>
-          <td class="text-end mono">${money(x.price_eur)}</td>
-          <td class="text-end mono">${x.area_m2 ? num(x.area_m2) + " m²" : "—"}</td>
-          <td class="text-end mono">${x.eur_m2 ? num(x.eur_m2) : "—"}</td>
-          <td><a href="${x.url}" target="_blank" rel="noopener">abrir</a></td>
-        `;
-        tbody.appendChild(tr);
+        document.getElementById("summary").textContent =
+          `${data.stats.count} resultados • mediana €/m²: ${data.stats.median_eur_m2 ? num(data.stats.median_eur_m2) : "—"}`;
+
+        const tbody = document.getElementById("tbody");
+        tbody.innerHTML = "";
+        for (const x of data.results) {
+          const tr = document.createElement("tr");
+          tr.innerHTML = `
+            <td>${sourceBadge(x.source)}</td>
+            <td>${(x.title || "—")}</td>
+            <td class="text-end mono">${money(x.price_eur)}</td>
+            <td class="text-end mono">${x.area_m2 ? num(x.area_m2) + " m²" : "—"}</td>
+            <td class="text-end mono">${x.eur_m2 ? num(x.eur_m2) : "—"}</td>
+            <td><a href="${x.url}" target="_blank" rel="noopener">abrir</a></td>
+          `;
+          tbody.appendChild(tr);
+        }
+
+        // charts
+        const bySource = data.stats.by_source || {};
+        const labels = Object.keys(bySource);
+        const counts = labels.map(k => bySource[k]);
+
+        if (chartBySource) chartBySource.destroy();
+        chartBySource = new Chart(document.getElementById("chartBySource"), {
+          type: "bar",
+          data: { labels, datasets: [{ label: "Anúncios (count)", data: counts }] },
+          options: { responsive: true }
+        });
+
+        // mediana €/m² por fonte (calculada a partir dos resultados atuais)
+        const groups = {};
+        for (const x of data.results) {
+          if (x.eur_m2 === null || x.eur_m2 === undefined) continue;
+          groups[x.source] = groups[x.source] || [];
+          groups[x.source].push(x.eur_m2);
+        }
+        const mLabels = Object.keys(groups);
+        const medians = mLabels.map(k => {
+          const arr = groups[k].slice().sort((a,b) => a-b);
+          const mid = Math.floor(arr.length/2);
+          return arr.length % 2 ? arr[mid] : (arr[mid-1] + arr[mid]) / 2;
+        });
+
+        if (chartMedian) chartMedian.destroy();
+        chartMedian = new Chart(document.getElementById("chartMedian"), {
+          type: "bar",
+          data: { labels: mLabels, datasets: [{ label: "Mediana €/m² (resultados)", data: medians }] },
+          options: { responsive: true }
+        });
+      } catch (err) {
+        console.error(err);
+        document.getElementById("summary").textContent = "Falha ao carregar. Tenta novamente.";
+      } finally {
+        btn.disabled = false;
+        btn.innerHTML = oldBtnHTML;
       }
-
-      // charts
-      const bySource = data.stats.by_source || {};
-      const labels = Object.keys(bySource);
-      const counts = labels.map(k => bySource[k]);
-
-      if (chartBySource) chartBySource.destroy();
-      chartBySource = new Chart(document.getElementById("chartBySource"), {
-        type: "bar",
-        data: { labels, datasets: [{ label: "Anúncios (count)", data: counts }] },
-        options: { responsive: true }
-      });
-
-      // mediana €/m² por fonte (calculada a partir dos resultados atuais)
-      const groups = {};
-      for (const x of data.results) {
-        if (x.eur_m2 === null || x.eur_m2 === undefined) continue;
-        groups[x.source] = groups[x.source] || [];
-        groups[x.source].push(x.eur_m2);
-      }
-      const mLabels = Object.keys(groups);
-      const medians = mLabels.map(k => {
-        const arr = groups[k].slice().sort((a,b) => a-b);
-        const mid = Math.floor(arr.length/2);
-        return arr.length % 2 ? arr[mid] : (arr[mid-1] + arr[mid]) / 2;
-      });
-
-      if (chartMedian) chartMedian.destroy();
-      chartMedian = new Chart(document.getElementById("chartMedian"), {
-        type: "bar",
-        data: { labels: mLabels, datasets: [{ label: "Mediana €/m² (resultados)", data: medians }] },
-        options: { responsive: true }
-      });
     }
 
     document.getElementById("btnRefresh").addEventListener("click", refresh);
