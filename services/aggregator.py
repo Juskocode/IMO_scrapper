@@ -8,6 +8,7 @@ from scrapers.imovirtual import ImovirtualScraper
 from scrapers.supercasa import SupercasaScraper
 from scrapers.casasapo import CasaSapoScraper
 from scrapers.remax import RemaxScraper
+from scrapers.olx import OLXScraper
 from scrapers.utils import slugify_pt
 
 DISTRICTS = [
@@ -22,6 +23,7 @@ SCRAPERS = {
     "supercasa": SupercasaScraper(),
     "casasapo": CasaSapoScraper(),
     "remax": RemaxScraper(),
+    "olx": OLXScraper(),
 }
 
 CACHE = TTLCache(maxsize=256, ttl=600)  # 10 min
