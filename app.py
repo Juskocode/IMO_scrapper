@@ -20,7 +20,7 @@ def api_listings():
     # fontes selecionadas (se vazio => todas)
     sources = request.args.getlist("sources")
     if not sources:
-        sources = ["idealista", "imovirtual", "supercasa", "casasapo", "remax"]
+        sources = ["idealista", "imovirtual", "supercasa", "casasapo", "remax", "olx"]
 
     # filtros numéricos (opcionais)
     def fnum(name):
