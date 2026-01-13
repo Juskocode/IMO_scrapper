@@ -1,0 +1,239 @@
+<!doctype html>
+<html lang="pt">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Dashboard Arrendamento T2 (€/m²)</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <style>
+    body { padding: 18px; }
+    .mono { font-variant-numeric: tabular-nums; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace; }
+    .small-note { color: #666; font-size: 0.9rem; }
+    table td { vertical-align: middle; }
+  </style>
+</head>
+<body>
+  <div class="container-fluid">
+    <h3 class="mb-3">Arrendamento T2 — ordenar por €/m²</h3>
+
+    <div class="row g-3">
+      <div class="col-lg-3">
+        <label class="form-label">Distrito</label>
+        <select id="district" class="form-select">
+          {% for d in districts %}
+            <option value="{{d}}" {% if d == default_district %}selected{% endif %}>{{d}}</option>
+          {% endfor %}
+        </select>
+      </div>
+
+      <div class="col-lg-2">
+        <label class="form-label">Páginas por site</label>
+        <input id="pages" type="number" min="1" max="10" class="form-control" value="2">
+      </div>
+
+      <div class="col-lg-2">
+        <label class="form-label">Limite resultados</label>
+        <input id="limit" type="number" min="10" max="1000" class="form-control" value="200">
+      </div>
+
+      <div class="col-lg-2">
+        <label class="form-label">Ordenar</label>
+        <select id="sort" class="form-select">
+          <option value="eur_m2_asc" selected>€/m² (asc)</option>
+          <option value="eur_m2_desc">€/m² (desc)</option>
+          <option value="price_asc">Preço (asc)</option>
+          <option value="price_desc">Preço (desc)</option>
+        </select>
+      </div>
+
+      <div class="col-lg-3 d-flex align-items-end">
+        <button id="btnRefresh" class="btn btn-primary w-100">Atualizar</button>
+      </div>
+    </div>
+
+    <div class="row g-3 mt-1">
+      <div class="col-lg-3">
+        <div class="card p-3">
+          <div class="fw-semibold mb-2">Fontes</div>
+          <div class="form-check"><input class="form-check-input source" type="checkbox" value="idealista" checked> <label class="form-check-label">Idealista</label></div>
+          <div class="form-check"><input class="form-check-input source" type="checkbox" value="imovirtual" checked> <label class="form-check-label">Imovirtual</label></div>
+          <div class="form-check"><input class="form-check-input source" type="checkbox" value="supercasa" checked> <label class="form-check-label">SUPERCASA</label></div>
+          <div class="form-check"><input class="form-check-input source" type="checkbox" value="casasapo" checked> <label class="form-check-label">CASA SAPO</label></div>
+          <div class="form-check"><input class="form-check-input source" type="checkbox" value="remax" checked> <label class="form-check-label">RE/MAX</label></div>
+        </div>
+      </div>
+
+      <div class="col-lg-9">
+        <div class="card p-3">
+          <div class="row g-2">
+            <div class="col-md-3">
+              <label class="form-label">Preço min (€)</label>
+              <input id="min_price" class="form-control" placeholder="ex: 600">
+            </div>
+            <div class="col-md-3">
+              <label class="form-label">Preço max (€)</label>
+              <input id="max_price" class="form-control" placeholder="ex: 1200">
+            </div>
+            <div class="col-md-3">
+              <label class="form-label">Área min (m²)</label>
+              <input id="min_area" class="form-control" placeholder="ex: 60">
+            </div>
+            <div class="col-md-3">
+              <label class="form-label">Área max (m²)</label>
+              <input id="max_area" class="form-control" placeholder="ex: 140">
+            </div>
+          </div>
+
+          <div class="row g-2 mt-1">
+            <div class="col-md-4">
+              <div class="form-check mt-4">
+                <input id="only_with_eurm2" class="form-check-input" type="checkbox">
+                <label class="form-check-label">Só com €/m² calculado</label>
+              </div>
+            </div>
+            <div class="col-md-5">
+              <div class="form-check mt-4">
+                <input id="exclude_temporary" class="form-check-input" type="checkbox" checked>
+                <label class="form-check-label">Excluir “temporário/sublocação” (heurística)</label>
+              </div>
+            </div>
+            <div class="col-md-3 d-flex align-items-end justify-content-end">
+              <div id="summary" class="small-note text-end"></div>
+            </div>
+          </div>
+
+          <hr class="my-3">
+
+          <div class="row g-3">
+            <div class="col-md-6">
+              <canvas id="chartBySource"></canvas>
+            </div>
+            <div class="col-md-6">
+              <canvas id="chartMedian"></canvas>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="mt-3 card p-3">
+      <div class="table-responsive">
+        <table class="table table-sm table-hover align-middle">
+          <thead>
+            <tr>
+              <th>Fonte</th>
+              <th>Anúncio</th>
+              <th class="text-end">Preço</th>
+              <th class="text-end">Área</th>
+              <th class="text-end">€/m²</th>
+              <th>Link</th>
+            </tr>
+          </thead>
+          <tbody id="tbody"></tbody>
+        </table>
+      </div>
+      <div class="small-note">Dica: aumenta “Páginas por site” para cobrir mais anúncios (vai demorar mais).</div>
+    </div>
+  </div>
+
+  <script>
+    let chartBySource = null;
+    let chartMedian = null;
+
+    function money(v) {
+      if (v === null || v === undefined) return "—";
+      return new Intl.NumberFormat("pt-PT", { style: "currency", currency: "EUR", maximumFractionDigits: 0 }).format(v);
+    }
+    function num(v) {
+      if (v === null || v === undefined) return "—";
+      return new Intl.NumberFormat("pt-PT", { maximumFractionDigits: 2 }).format(v);
+    }
+
+    function selectedSources() {
+      return Array.from(document.querySelectorAll(".source:checked")).map(x => x.value);
+    }
+
+    async function refresh() {
+      const params = new URLSearchParams();
+      params.set("district", document.getElementById("district").value);
+      params.set("pages", document.getElementById("pages").value);
+      params.set("limit", document.getElementById("limit").value);
+      params.set("sort", document.getElementById("sort").value);
+
+      const min_price = document.getElementById("min_price").value.trim();
+      const max_price = document.getElementById("max_price").value.trim();
+      const min_area  = document.getElementById("min_area").value.trim();
+      const max_area  = document.getElementById("max_area").value.trim();
+      if (min_price) params.set("min_price", min_price);
+      if (max_price) params.set("max_price", max_price);
+      if (min_area) params.set("min_area", min_area);
+      if (max_area) params.set("max_area", max_area);
+
+      params.set("only_with_eurm2", document.getElementById("only_with_eurm2").checked ? "1" : "0");
+      params.set("exclude_temporary", document.getElementById("exclude_temporary").checked ? "1" : "0");
+
+      for (const s of selectedSources()) params.append("sources", s);
+
+      document.getElementById("summary").textContent = "A carregar…";
+
+      const res = await fetch("/api/listings?" + params.toString());
+      const data = await res.json();
+
+      document.getElementById("summary").textContent =
+        `${data.stats.count} resultados • mediana €/m²: ${data.stats.median_eur_m2 ? num(data.stats.median_eur_m2) : "—"}`;
+
+      const tbody = document.getElementById("tbody");
+      tbody.innerHTML = "";
+      for (const x of data.results) {
+        const tr = document.createElement("tr");
+        tr.innerHTML = `
+          <td class="mono">${x.source}</td>
+          <td>${(x.title || "—")}</td>
+          <td class="text-end mono">${money(x.price_eur)}</td>
+          <td class="text-end mono">${x.area_m2 ? num(x.area_m2) + " m²" : "—"}</td>
+          <td class="text-end mono">${x.eur_m2 ? num(x.eur_m2) : "—"}</td>
+          <td><a href="${x.url}" target="_blank" rel="noopener">abrir</a></td>
+        `;
+        tbody.appendChild(tr);
+      }
+
+      // charts
+      const bySource = data.stats.by_source || {};
+      const labels = Object.keys(bySource);
+      const counts = labels.map(k => bySource[k]);
+
+      if (chartBySource) chartBySource.destroy();
+      chartBySource = new Chart(document.getElementById("chartBySource"), {
+        type: "bar",
+        data: { labels, datasets: [{ label: "Anúncios (count)", data: counts }] },
+        options: { responsive: true }
+      });
+
+      // mediana €/m² por fonte (calculada a partir dos resultados atuais)
+      const groups = {};
+      for (const x of data.results) {
+        if (x.eur_m2 === null || x.eur_m2 === undefined) continue;
+        groups[x.source] = groups[x.source] || [];
+        groups[x.source].push(x.eur_m2);
+      }
+      const mLabels = Object.keys(groups);
+      const medians = mLabels.map(k => {
+        const arr = groups[k].slice().sort((a,b) => a-b);
+        const mid = Math.floor(arr.length/2);
+        return arr.length % 2 ? arr[mid] : (arr[mid-1] + arr[mid]) / 2;
+      });
+
+      if (chartMedian) chartMedian.destroy();
+      chartMedian = new Chart(document.getElementById("chartMedian"), {
+        type: "bar",
+        data: { labels: mLabels, datasets: [{ label: "Mediana €/m² (resultados)", data: medians }] },
+        options: { responsive: true }
+      });
+    }
+
+    document.getElementById("btnRefresh").addEventListener("click", refresh);
+    window.addEventListener("load", refresh);
+  </script>
+</body>
+</html>
