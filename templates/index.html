@@ -154,6 +154,7 @@
               <th class="text-end">Área</th>
               <th class="text-end">€/m²</th>
               <th>Link</th>
+              <th>Ações</th>
             </tr>
           </thead>
           <tbody id="tbody"></tbody>
@@ -166,6 +167,139 @@
   <script>
     let chartBySource = null;
     let chartMedian = null;
+
+    // Persistent marks (Loved/Discarded)
+    let MARKS = {};
+    let LAST_DATA = null; // { results, stats }
+
+    function loadMarksLocal() {
+      try {
+        MARKS = JSON.parse(localStorage.getItem('imo_marks') || '{}') || {};
+      } catch (_) { MARKS = {}; }
+    }
+    function saveMarksLocal() {
+      try { localStorage.setItem('imo_marks', JSON.stringify(MARKS)); } catch (_) {}
+    }
+    async function loadMarks() {
+      loadMarksLocal();
+      try {
+        const res = await fetch('/api/marks');
+        if (res.ok) {
+          const remote = await res.json();
+          // Merge: remote overwrites local
+          MARKS = Object.assign({}, MARKS, remote || {});
+          saveMarksLocal();
+        }
+      } catch (_) { /* offline or no server marks, ignore */ }
+    }
+    async function postMark(url, state) {
+      try {
+        await fetch('/api/marks', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ url, state })
+        });
+      } catch (_) { /* ignore */ }
+    }
+    function getMark(url) { return MARKS[url] || null; }
+
+    function saveUIState() {
+      const s = {
+        hide_discarded: document.getElementById('hide_discarded').checked ? 1 : 0,
+        only_loved: document.getElementById('only_loved').checked ? 1 : 0,
+      };
+      try { localStorage.setItem('imo_ui', JSON.stringify(s)); } catch (_) {}
+    }
+    function restoreUIState() {
+      try {
+        const s = JSON.parse(localStorage.getItem('imo_ui') || '{}') || {};
+        if (typeof s.hide_discarded !== 'undefined') document.getElementById('hide_discarded').checked = !!s.hide_discarded;
+        if (typeof s.only_loved !== 'undefined') document.getElementById('only_loved').checked = !!s.only_loved;
+      } catch (_) {}
+    }
+
+    function badgesFor(url) {
+      const st = getMark(url);
+      let html = '';
+      if (st === 'loved') html += '<span class="badge badge-pink ms-1">Favorito</span>';
+      if (st === 'discarded') html += '<span class="badge text-bg-dark ms-1">Descartado</span>';
+      return html;
+    }
+
+    function applyLocalFilters(arr) {
+      const hideDiscarded = document.getElementById('hide_discarded').checked;
+      const onlyLoved = document.getElementById('only_loved').checked;
+      return arr.filter(x => {
+        const m = getMark(x.url);
+        if (onlyLoved) return m === 'loved';
+        if (hideDiscarded && m === 'discarded') return false;
+        return true;
+      });
+    }
+
+    function median(values) {
+      const nums = values.slice().sort((a,b)=>a-b);
+      const n = nums.length; if (!n) return null;
+      const mid = Math.floor(n/2);
+      return n % 2 ? nums[mid] : (nums[mid-1] + nums[mid]) / 2;
+    }
+
+    function renderFromLast() {
+      if (!LAST_DATA) return;
+      const data = LAST_DATA;
+      const all = data.results || [];
+      const filtered = applyLocalFilters(all);
+
+      const tbody = document.getElementById('tbody');
+      tbody.innerHTML = '';
+      for (const x of filtered) {
+        const loved = getMark(x.url) === 'loved';
+        const discarded = getMark(x.url) === 'discarded';
+        const tr = document.createElement('tr');
+        if (discarded) tr.classList.add('row-discarded');
+        tr.innerHTML = `
+          <td>${sourceBadge(x.source)}</td>
+          <td class="title-cell">${(x.title || '—')} <span class="status-badges">${badgesFor(x.url)}</span></td>
+          <td class="text-end mono">${money(x.price_eur)}</td>
+          <td class="text-end mono">${x.area_m2 ? num(x.area_m2) + ' m²' : '—'}</td>
+          <td class="text-end mono">${x.eur_m2 ? num(x.eur_m2) : '—'}</td>
+          <td><a href="${x.url}" target="_blank" rel="noopener">abrir</a></td>
+          <td class="actions text-nowrap">
+            <div class="btn-group" role="group">
+              <button type="button" class="btn btn-outline-secondary btn-love" title="${loved ? 'Remover favorito' : 'Marcar favorito'}" aria-label="toggle favorite" data-url="${x.url}">${loved ? '❤' : '♡'}</button>
+              <button type="button" class="btn btn-outline-secondary btn-discard" title="${discarded ? 'Repor' : 'Descartar'}" aria-label="toggle discard" data-url="${x.url}">🗑</button>
+            </div>
+          </td>
+        `;
+        tbody.appendChild(tr);
+      }
+
+      // Summary text
+      const typ = document.getElementById('typology').value;
+      const med = median(filtered.filter(x=>x.eur_m2!==null && x.eur_m2!==undefined).map(x=>x.eur_m2));
+      document.getElementById('summary').textContent = `${filtered.length} de ${data.stats.count} resultados • Tipologia: ${typ} • mediana €/m² (visíveis): ${med ? num(med) : '—'}`;
+
+      // Charts from the filtered results
+      const bySource = {};
+      for (const x of filtered) bySource[x.source] = (bySource[x.source] || 0) + 1;
+      const labels = Object.keys(bySource);
+      const counts = labels.map(k => bySource[k]);
+      if (chartBySource) chartBySource.destroy();
+      chartBySource = new Chart(document.getElementById('chartBySource'), {
+        type: 'bar', data: { labels, datasets: [{ label: 'Anúncios (visíveis)', data: counts }] }, options: { responsive: true }
+      });
+
+      const groups = {};
+      for (const x of filtered) {
+        if (x.eur_m2 === null || x.eur_m2 === undefined) continue;
+        (groups[x.source] = groups[x.source] || []).push(x.eur_m2);
+      }
+      const mLabels = Object.keys(groups);
+      const medians = mLabels.map(k => median(groups[k]));
+      if (chartMedian) chartMedian.destroy();
+      chartMedian = new Chart(document.getElementById('chartMedian'), {
+        type: 'bar', data: { labels: mLabels, datasets: [{ label: 'Mediana €/m² (visíveis)', data: medians }] }, options: { responsive: true }
+      });
+    }
 
     function money(v) {
       if (v === null || v === undefined) return "—";
@@ -208,6 +342,7 @@
         params.set("pages", document.getElementById("pages").value);
         params.set("limit", document.getElementById("limit").value);
         params.set("sort", document.getElementById("sort").value);
+        params.set("typology", document.getElementById("typology").value);
 
         const min_price = document.getElementById("min_price").value.trim();
         const max_price = document.getElementById("max_price").value.trim();
@@ -228,57 +363,8 @@
         const res = await fetch("/api/listings?" + params.toString());
         if (!res.ok) throw new Error('Erro a carregar dados');
         const data = await res.json();
-
-        document.getElementById("summary").textContent =
-          `${data.stats.count} resultados • mediana €/m²: ${data.stats.median_eur_m2 ? num(data.stats.median_eur_m2) : "—"}`;
-
-        const tbody = document.getElementById("tbody");
-        tbody.innerHTML = "";
-        for (const x of data.results) {
-          const tr = document.createElement("tr");
-          tr.innerHTML = `
-            <td>${sourceBadge(x.source)}</td>
-            <td>${(x.title || "—")}</td>
-            <td class="text-end mono">${money(x.price_eur)}</td>
-            <td class="text-end mono">${x.area_m2 ? num(x.area_m2) + " m²" : "—"}</td>
-            <td class="text-end mono">${x.eur_m2 ? num(x.eur_m2) : "—"}</td>
-            <td><a href="${x.url}" target="_blank" rel="noopener">abrir</a></td>
-          `;
-          tbody.appendChild(tr);
-        }
-
-        // charts
-        const bySource = data.stats.by_source || {};
-        const labels = Object.keys(bySource);
-        const counts = labels.map(k => bySource[k]);
-
-        if (chartBySource) chartBySource.destroy();
-        chartBySource = new Chart(document.getElementById("chartBySource"), {
-          type: "bar",
-          data: { labels, datasets: [{ label: "Anúncios (count)", data: counts }] },
-          options: { responsive: true }
-        });
-
-        // mediana €/m² por fonte (calculada a partir dos resultados atuais)
-        const groups = {};
-        for (const x of data.results) {
-          if (x.eur_m2 === null || x.eur_m2 === undefined) continue;
-          groups[x.source] = groups[x.source] || [];
-          groups[x.source].push(x.eur_m2);
-        }
-        const mLabels = Object.keys(groups);
-        const medians = mLabels.map(k => {
-          const arr = groups[k].slice().sort((a,b) => a-b);
-          const mid = Math.floor(arr.length/2);
-          return arr.length % 2 ? arr[mid] : (arr[mid-1] + arr[mid]) / 2;
-        });
-
-        if (chartMedian) chartMedian.destroy();
-        chartMedian = new Chart(document.getElementById("chartMedian"), {
-          type: "bar",
-          data: { labels: mLabels, datasets: [{ label: "Mediana €/m² (resultados)", data: medians }] },
-          options: { responsive: true }
-        });
+        LAST_DATA = data;
+        renderFromLast();
       } catch (err) {
         console.error(err);
         document.getElementById("summary").textContent = "Falha ao carregar. Tenta novamente.";
@@ -289,7 +375,37 @@
     }
 
     document.getElementById("btnRefresh").addEventListener("click", refresh);
-    window.addEventListener("load", refresh);
+    document.getElementById("typology").addEventListener("change", refresh);
+    document.getElementById("hide_discarded").addEventListener("change", () => { saveUIState(); renderFromLast(); });
+    document.getElementById("only_loved").addEventListener("change", () => { saveUIState(); renderFromLast(); });
+
+    // Actions (event delegation)
+    document.getElementById("tbody").addEventListener("click", (ev) => {
+      const btn = ev.target.closest('.btn-love, .btn-discard');
+      if (!btn) return;
+      const url = btn.getAttribute('data-url');
+      if (!url) return;
+      let state = null;
+      if (btn.classList.contains('btn-love')) {
+        state = (MARKS[url] === 'loved') ? null : 'loved';
+      } else if (btn.classList.contains('btn-discard')) {
+        state = (MARKS[url] === 'discarded') ? null : 'discarded';
+      }
+      if (state) {
+        MARKS[url] = state;
+      } else {
+        delete MARKS[url];
+      }
+      saveMarksLocal();
+      postMark(url, state || '');
+      renderFromLast();
+    });
+
+    window.addEventListener("load", async () => {
+      restoreUIState();
+      await loadMarks();
+      await refresh();
+    });
   </script>
 </body>
 </html>
