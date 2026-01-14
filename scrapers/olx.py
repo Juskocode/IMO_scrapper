@@ -6,26 +6,36 @@ class OLXScraper(BaseScraper):
     name = "olx"
     base = "https://www.olx.pt"
 
-    def build_url(self, district_slug: str, page: int) -> str:
-        # OLX (PT) estrutura típica com /d/<distrito>/ ... e pesquisa por T2
-        # Exemplo esperado: /d/lisboa/imoveis/apartamentos-casas-arrendamento/apartamentos/q-t2/?page=2
-        url = (
-            f"{self.base}/d/{district_slug}/imoveis/"
-            f"apartamentos-casas-arrendamento/apartamentos/q-t2/"
-        )
+    def build_url(self, district_slug: str, page: int, typology: str = "T2") -> str:
+        # OLX (PT) estrutura típica com /d/<distrito>/imoveis/apartamentos-casas-para-alugar/
+        # Pesquisa por tipologia via query ?q=tN (texto livre), paginação ?page=N
+        url = f"{self.base}/d/{district_slug}/imoveis/apartamentos-casas-para-alugar/"
+        params = []
+        t = (typology or "T2").upper().replace(" ", "")
+        if t not in {"T*", "*"}:
+            params.append(f"q={t.lower()}")
         if page > 1:
-            url += f"?page={page}"
+            params.append(f"page={page}")
+        if params:
+            url += "?" + "&".join(params)
         return url
 
     def parse_listings(self, html: str, district_name: str):
         soup = self.soup(html)
         items = []
 
-        # Âncoras de anúncio: costumam começar com /d/anuncio/
-        for a in soup.select('a[href^="/d/anuncio/"]'):
+        # Âncoras de anúncio: preferir seletores estáveis usados pelo OLX
+        anchors = []
+        anchors.extend(soup.select('a[data-cy="listing-ad-title"]'))
+        anchors.extend(soup.select('a[data-testid="ad-title"]'))
+        anchors.extend(soup.select('a[href^="/d/anuncio/"]'))
+
+        seen_hrefs = set()
+        for a in anchors:
             href = a.get("href")
-            if not href:
+            if not href or href in seen_hrefs:
                 continue
+            seen_hrefs.add(href)
 
             # Encontra o cartão pai para recolher preço/área em texto
             card = a
@@ -70,10 +80,10 @@ class OLXScraper(BaseScraper):
             out.append(x)
         return out
 
-    def scrape(self, district_name: str, district_slug: str, pages: int):
+    def scrape(self, district_name: str, district_slug: str, pages: int, typology: str = "T2"):
         out = []
         for page in range(1, pages + 1):
-            url = self.build_url(district_slug, page)
+            url = self.build_url(district_slug, page, typology)
             html = self.fetch(url)
             out.extend(self.parse_listings(html, district_name))
             self.polite_sleep()

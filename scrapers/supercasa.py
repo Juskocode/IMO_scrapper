@@ -6,9 +6,13 @@ class SupercasaScraper(BaseScraper):
     name = "supercasa"
     base = "https://supercasa.pt"
 
-    def build_url(self, district_slug: str, page: int) -> str:
-        # /arrendar-casas/<distrito>-distrito/com-t2 + /pagina-2
-        url = f"{self.base}/arrendar-casas/{district_slug}-distrito/com-t2"
+    def build_url(self, district_slug: str, page: int, typology: str = "T2") -> str:
+        # /arrendar-casas/<distrito>-distrito/[com-tN] + /pagina-2
+        t = (typology or "T2").upper().replace(" ", "")
+        seg = ""
+        if t.startswith("T") and "+" not in t and len(t) > 1 and t[1:].isdigit():
+            seg = f"/com-{t.lower()}"
+        url = f"{self.base}/arrendar-casas/{district_slug}-distrito{seg}"
         if page > 1:
             url += f"/pagina-{page}"
         return url
@@ -70,10 +74,10 @@ class SupercasaScraper(BaseScraper):
             out.append(x)
         return out
 
-    def scrape(self, district_name: str, district_slug: str, pages: int):
+    def scrape(self, district_name: str, district_slug: str, pages: int, typology: str = "T2"):
         out = []
         for page in range(1, pages + 1):
-            url = self.build_url(district_slug, page)
+            url = self.build_url(district_slug, page, typology)
             html = self.fetch(url)
             out.extend(self.parse_listings(html, district_name))
             self.polite_sleep()

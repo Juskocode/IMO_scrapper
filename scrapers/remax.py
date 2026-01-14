@@ -5,10 +5,13 @@ class RemaxScraper(BaseScraper):
     name = "remax"
     base = "https://remax.pt"
 
-    def build_url(self, district_slug: str, page: int) -> str:
-        # /pt/arrendar/apartamento/t2/<distrito>
-        # paginação varia (às vezes é scroll), então mantemos por agora page=1..N com tentativa simples
-        url = f"{self.base}/pt/arrendar/apartamento/t2/{district_slug}"
+    def build_url(self, district_slug: str, page: int, typology: str = "T2") -> str:
+        # /pt/arrendar/apartamento[/tN]/<distrito>
+        t = (typology or "T2").upper().replace(" ", "")
+        seg = "apartamento"
+        if t.startswith("T") and "+" not in t and len(t) > 1 and t[1:].isdigit():
+            seg += f"/{t.lower()}"
+        url = f"{self.base}/pt/arrendar/{seg}/{district_slug}"
         if page > 1:
             url += f"?page={page}"
         return url
@@ -17,18 +20,24 @@ class RemaxScraper(BaseScraper):
         soup = self.soup(html)
         items = []
 
-        # links de detalhe geralmente /pt/imoveis/arrendamento-...
-        for a in soup.select('a[href^="/pt/imoveis/arrendamento-"]'):
+        # links de detalhe (alargado): /pt/imoveis/... (a página de listagem já é de arrendamento)
+        anchors = []
+        anchors.extend(soup.select('a[href^="/pt/imoveis/"]'))
+        anchors.extend(soup.select('a[href*="/pt/imoveis/arrendamento-"]'))
+
+        seen_hrefs = set()
+        for a in anchors:
             href = a.get("href")
-            if not href:
+            if not href or href in seen_hrefs:
                 continue
+            seen_hrefs.add(href)
 
             card = a
             for _ in range(7):
                 if card is None:
                     break
                 txt = card.get_text(" ", strip=True)
-                if "€" in txt and "m²" in txt:
+                if "€" in txt or "m²" in txt or "Área" in txt:
                     break
                 card = card.parent
 
@@ -63,10 +72,10 @@ class RemaxScraper(BaseScraper):
             out.append(x)
         return out
 
-    def scrape(self, district_name: str, district_slug: str, pages: int):
+    def scrape(self, district_name: str, district_slug: str, pages: int, typology: str = "T2"):
         out = []
         for page in range(1, pages + 1):
-            url = self.build_url(district_slug, page)
+            url = self.build_url(district_slug, page, typology)
             html = self.fetch(url)
             out.extend(self.parse_listings(html, district_name))
             self.polite_sleep()
