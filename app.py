@@ -2,7 +2,7 @@ import os
 from flask import Flask, render_template, request, jsonify
 from services.aggregator import get_listings, DISTRICTS
 
-#aggregations
+#aggregation
 
 app = Flask(__name__)
 
@@ -16,6 +16,9 @@ def api_listings():
     district = request.args.get("district", "Leiria")
     pages = int(request.args.get("pages", "2"))
     pages = max(1, min(pages, 10))
+
+    # tipologia (T*, T0, T1, T2, T3, T1+1, ...)
+    typology = request.args.get("typology", "T2")
 
     # fontes selecionadas (se vazio => todas)
     sources = request.args.getlist("sources")
@@ -46,7 +49,8 @@ def api_listings():
         sources=sources,
         filters=filters,
         sort=sort,
-        limit=limit
+        limit=limit,
+        typology=typology,
     )
     return jsonify({"results": results, "stats": stats})
 
