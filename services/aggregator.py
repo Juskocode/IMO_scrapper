@@ -1,5 +1,6 @@
 import time
 import statistics
+import re
 from cachetools import TTLCache
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
@@ -89,14 +90,54 @@ def _stats(items):
         "median_eur_m2": med
     }
 
-def get_listings(district, pages, sources, filters, sort, limit):
+def _normalize_typology(t: str) -> str:
+    if not t:
+        return "T2"
+    t = t.strip().upper().replace(" ", "")
+    if t in {"*", "ALL", "T*"}:
+        return "T*"
+    if not t.startswith("T"):
+        t = "T" + t
+    return t
+
+
+def _typology_regex(t: str):
+    t = _normalize_typology(t)
+    if t == "T*":
+        return None
+    # Build a regex that matches e.g., T2 or T2+1 with optional spaces
+    plus_idx = t.find("+")
+    if plus_idx != -1:
+        base = re.escape(t[1:plus_idx])  # digits after T
+        extra = re.escape(t[plus_idx+1:])
+        pat = rf"\bT\s*{base}\s*\+\s*{extra}\b"
+    else:
+        base = re.escape(t[1:])
+        # Do not match T2+1 when filtering T2 (negative lookahead for '+')
+        pat = rf"\bT\s*{base}(?!\s*\+)\b"
+    return re.compile(pat, re.IGNORECASE)
+
+
+def _apply_typology(items, typology):
+    rx = _typology_regex(typology)
+    if rx is None:
+        return items
+    out = []
+    for x in items:
+        txt = (x.get("title", "") + " " + x.get("snippet", "")).strip()
+        if rx.search(txt):
+            out.append(x)
+    return out
+
+
+def get_listings(district, pages, sources, filters, sort, limit, typology):
     if district not in DISTRICTS:
         district = "Leiria"
 
     district_slug = slugify_pt(district)
     sources = [s for s in sources if s in SCRAPERS]
 
-    cache_key = (district, district_slug, pages, tuple(sorted(sources)))
+    cache_key = (district, district_slug, pages, tuple(sorted(sources)), _normalize_typology(typology))
     if cache_key in CACHE:
         items = CACHE[cache_key]
     else:
@@ -105,7 +146,7 @@ def get_listings(district, pages, sources, filters, sort, limit):
         with ThreadPoolExecutor(max_workers=min(8, len(sources) or 1)) as ex:
             futs = []
             for s in sources:
-                futs.append(ex.submit(SCRAPERS[s].scrape, district, district_slug, pages))
+                futs.append(ex.submit(SCRAPERS[s].scrape, district, district_slug, pages, typology))
             for f in as_completed(futs):
                 try:
                     items.extend(f.result())
@@ -125,6 +166,9 @@ def get_listings(district, pages, sources, filters, sort, limit):
         items = deduped
 
         CACHE[cache_key] = items
+
+    # Filtro adicional por tipologia (por segurança), sobretudo útil quando uma fonte não suporta o filtro via URL
+    items = _apply_typology(items, typology)
 
     items = _apply_filters(items, filters)
     items = _sort(items, sort)
