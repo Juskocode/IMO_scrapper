@@ -1,10 +1,39 @@
 import os
+import json
+import threading
+from pathlib import Path
 from flask import Flask, render_template, request, jsonify
 from services.aggregator import get_listings, DISTRICTS
 
 #aggregation
 
 app = Flask(__name__)
+
+# --- Favorites/Discard persistence (JSON file) ---
+MARKS_LOCK = threading.Lock()
+PROJECT_ROOT = Path(__file__).resolve().parent
+MARKS_FILE = Path(os.environ.get("MARKS_FILE", PROJECT_ROOT / "marks.json"))
+
+def _load_marks():
+    try:
+        if MARKS_FILE.exists():
+            with MARKS_LOCK:
+                with open(MARKS_FILE, "r", encoding="utf-8") as f:
+                    return json.load(f)
+    except Exception:
+        pass
+    return {}
+
+def _save_marks(data: dict):
+    try:
+        MARKS_FILE.parent.mkdir(parents=True, exist_ok=True)
+        tmp = str(MARKS_FILE) + ".tmp"
+        with MARKS_LOCK:
+            with open(tmp, "w", encoding="utf-8") as f:
+                json.dump(data, f, ensure_ascii=False, indent=2)
+            os.replace(tmp, MARKS_FILE)
+    except Exception:
+        pass
 
 @app.get("/")
 def index():
@@ -53,6 +82,30 @@ def api_listings():
         typology=typology,
     )
     return jsonify({"results": results, "stats": stats})
+
+@app.get("/api/marks")
+def api_get_marks():
+    return jsonify(_load_marks())
+
+@app.post("/api/marks")
+def api_post_mark():
+    try:
+        data = request.get_json(force=True) or {}
+        url = (data.get("url") or "").strip()
+        state = (data.get("state") or "").strip() or None
+        if not url:
+            return jsonify({"error": "missing url"}), 400
+        marks = _load_marks()
+        if state in ("loved", "discarded"):
+            marks[url] = state
+        else:
+            # clear mark when state invalid/empty
+            if url in marks:
+                del marks[url]
+        _save_marks(marks)
+        return jsonify({"ok": True, "state": marks.get(url)})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
 
 if __name__ == "__main__":
     host = os.environ.get("HOST", "127.0.0.1")
