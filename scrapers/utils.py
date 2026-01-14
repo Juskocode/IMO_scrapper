@@ -29,10 +29,10 @@ def parse_area_m2(text: str):
     if not text:
         return None
     t = text.replace("\xa0", " ")
-    # tenta padrões "Área bruta 105 m²" / "área bruta" / "m² área"
-    m = re.search(r"area\s*(?:bruta|util|útil)\s*[:\-]?\s*(\d+(?:[.,]\d+)?)\s*m²", t, re.IGNORECASE)
+    # aceita m² e m2; tenta padrões "Área bruta 105 m²" / "área bruta" / genérico
+    m = re.search(r"area\s*(?:bruta|util|útil)\s*[:\-]?\s*(\d+(?:[.,]\d+)?)\s*m(?:\s*²|\s*2)", t, re.IGNORECASE)
     if not m:
-        m = re.search(r"(\d+(?:[.,]\d+)?)\s*m²", t, re.IGNORECASE)
+        m = re.search(r"(\d+(?:[.,]\d+)?)\s*m(?:\s*²|\s*2)", t, re.IGNORECASE)
     if not m:
         return None
     v = m.group(1).replace(",", ".")
