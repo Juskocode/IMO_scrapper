@@ -6,10 +6,12 @@ class OLXScraper(BaseScraper):
     name = "olx"
     base = "https://www.olx.pt"
 
-    def build_url(self, district_slug: str, page: int, typology: str = "T2") -> str:
+    def build_url(self, district_slug: str, page: int, typology: str = "T2", search_type: str = "rent") -> str:
         # OLX (PT) estrutura típica com /d/<distrito>/imoveis/apartamentos-casas-para-alugar/
+        # ou /d/<distrito>/imoveis/apartamentos-casas-para-vender/
         # Pesquisa por tipologia via query ?q=tN (texto livre), paginação ?page=N
-        url = f"{self.base}/d/{district_slug}/imoveis/apartamentos-casas-para-alugar/"
+        mode = "alugar" if search_type == "rent" else "vender"
+        url = f"{self.base}/d/{district_slug}/imoveis/apartamentos-casas-para-{mode}/"
         params = []
         t = (typology or "T2").upper().replace(" ", "")
         if t not in {"T*", "*"}:
@@ -80,10 +82,10 @@ class OLXScraper(BaseScraper):
             out.append(x)
         return out
 
-    def scrape(self, district_name: str, district_slug: str, pages: int, typology: str = "T2"):
+    def scrape(self, district_name: str, district_slug: str, pages: int, typology: str = "T2", search_type: str = "rent"):
         out = []
         for page in range(1, pages + 1):
-            url = self.build_url(district_slug, page, typology)
+            url = self.build_url(district_slug, page, typology, search_type)
             html = self.fetch(url)
             out.extend(self.parse_listings(html, district_name))
             self.polite_sleep()

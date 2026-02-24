@@ -49,5 +49,5 @@ class BaseScraper:
     def polite_sleep(self):
         time.sleep(random.uniform(0.6, 1.3))
 
-    def scrape(self, district_name: str, district_slug: str, pages: int, typology: str = "T2"):
+    def scrape(self, district_name: str, district_slug: str, pages: int, typology: str = "T2", search_type: str = "rent"):
         raise NotImplementedError

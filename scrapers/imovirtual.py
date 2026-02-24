@@ -6,13 +6,16 @@ class ImovirtualScraper(BaseScraper):
     name = "imovirtual"
     base = "https://www.imovirtual.com"
 
-    def build_url(self, district_slug: str, page: int, typology: str = "T2") -> str:
+    def build_url(self, district_slug: str, page: int, typology: str = "T2", search_type: str = "rent") -> str:
         # /pt/resultados/arrendar/apartamento%2CtN/<distrito>?page=2
+        # /pt/resultados/comprar/apartamento%2CtN/<distrito>?page=2
         t = (typology or "T2").upper().replace(" ", "")
         seg = "apartamento"
         if t.startswith("T") and "+" not in t and len(t) > 1 and t[1:].isdigit():
             seg = f"apartamento%2C{t.lower()}"
-        url = f"{self.base}/pt/resultados/arrendar/{seg}/{district_slug}"
+        
+        mode = "arrendar" if search_type == "rent" else "comprar"
+        url = f"{self.base}/pt/resultados/{mode}/{seg}/{district_slug}"
         if page > 1:
             url += f"?page={page}"
         return url
@@ -79,10 +82,10 @@ class ImovirtualScraper(BaseScraper):
             out.append(x)
         return out
 
-    def scrape(self, district_name: str, district_slug: str, pages: int, typology: str = "T2"):
+    def scrape(self, district_name: str, district_slug: str, pages: int, typology: str = "T2", search_type: str = "rent"):
         out = []
         for page in range(1, pages + 1):
-            url = self.build_url(district_slug, page, typology)
+            url = self.build_url(district_slug, page, typology, search_type)
             html = self.fetch(url)
             out.extend(self.parse_listings(html, district_name))
             self.polite_sleep()
