@@ -130,14 +130,14 @@ def _apply_typology(items, typology):
     return out
 
 
-def get_listings(district, pages, sources, filters, sort, limit, typology):
+def get_listings(district, pages, sources, filters, sort, limit, typology, search_type="rent"):
     if district not in DISTRICTS:
         district = "Leiria"
 
     district_slug = slugify_pt(district)
     sources = [s for s in sources if s in SCRAPERS]
 
-    cache_key = (district, district_slug, pages, tuple(sorted(sources)), _normalize_typology(typology))
+    cache_key = (district, district_slug, pages, tuple(sorted(sources)), _normalize_typology(typology), search_type)
     if cache_key in CACHE:
         items = CACHE[cache_key]
     else:
@@ -146,7 +146,7 @@ def get_listings(district, pages, sources, filters, sort, limit, typology):
         with ThreadPoolExecutor(max_workers=min(8, len(sources) or 1)) as ex:
             futs = []
             for s in sources:
-                futs.append(ex.submit(SCRAPERS[s].scrape, district, district_slug, pages, typology))
+                futs.append(ex.submit(SCRAPERS[s].scrape, district, district_slug, pages, typology, search_type))
             for f in as_completed(futs):
                 try:
                     items.extend(f.result())

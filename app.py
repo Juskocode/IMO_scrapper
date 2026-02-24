@@ -38,7 +38,7 @@ def _save_marks(data: dict):
 @app.get("/")
 def index():
     default_district = request.args.get("district", "Leiria")
-    return render_template("index.html", districts=DISTRICTS, default_district=default_district)
+    return render_template("dashboard.html", districts=DISTRICTS, default_district=default_district)
 
 @app.get("/api/listings")
 def api_listings():
@@ -72,6 +72,8 @@ def api_listings():
     limit = int(request.args.get("limit", "200"))
     limit = max(10, min(limit, 1000))
 
+    search_type = request.args.get("search_type", "rent")
+
     results, stats = get_listings(
         district=district,
         pages=pages,
@@ -80,6 +82,7 @@ def api_listings():
         sort=sort,
         limit=limit,
         typology=typology,
+        search_type=search_type,
     )
     return jsonify({"results": results, "stats": stats})
 
