@@ -1,6 +1,7 @@
 import time
 import statistics
 import re
+import logging
 from cachetools import TTLCache
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
@@ -17,6 +18,8 @@ DISTRICTS = [
     "Faro", "Guarda", "Leiria", "Lisboa", "Portalegre", "Porto", "Santarém",
     "Setúbal", "Viana do Castelo", "Vila Real", "Viseu"
 ]
+
+logger = logging.getLogger("aggregator")
 
 SCRAPERS = {
     "idealista": IdealistaScraper(),
@@ -149,9 +152,12 @@ def get_listings(district, pages, sources, filters, sort, limit, typology, searc
                 futs.append(ex.submit(SCRAPERS[s].scrape, district, district_slug, pages, typology, search_type))
             for f in as_completed(futs):
                 try:
-                    items.extend(f.result())
-                except Exception:
+                    res = f.result()
+                    logger.info(f"Scraper finished. Got {len(res)} results.")
+                    items.extend(res)
+                except Exception as e:
                     # não aborta tudo se uma fonte falhar
+                    logger.error(f"Scraper failed with exception: {e}")
                     pass
 
         # dedupe por URL
