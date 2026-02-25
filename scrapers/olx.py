@@ -7,70 +7,119 @@ class OLXScraper(BaseScraper):
     base = "https://www.olx.pt"
 
     def build_url(self, district_slug: str, page: int, typology: str = "T2", search_type: str = "rent") -> str:
-        # OLX (PT) estrutura típica com /d/<distrito>/imoveis/apartamentos-casas-para-alugar/
-        # ou /d/<distrito>/imoveis/apartamentos-casas-para-vender/
-        # Pesquisa por tipologia via query ?q=tN (texto livre), paginação ?page=N
-        mode = "alugar" if search_type == "rent" else "vender"
-        url = f"{self.base}/d/{district_slug}/imoveis/apartamentos-casas-para-{mode}/"
-        params = []
+        # OLX (PT) - Using the search endpoint
+        # mode = "alugar" if search_type == "rent" else "venda"
+        # The base URL should be https://www.olx.pt/imoveis/
+        url = f"{self.base}/imoveis/"
+        
+        mode_pt = "alugar" if search_type == "rent" else "venda"
         t = (typology or "T2").upper().replace(" ", "")
-        if t not in {"T*", "*"}:
-            params.append(f"q={t.lower()}")
+        url += f"?q={district_slug}+{t.lower()}+{mode_pt}"
+        
         if page > 1:
-            params.append(f"page={page}")
-        if params:
-            url += "?" + "&".join(params)
+            url += f"&page={page}"
+            
         return url
 
     def parse_listings(self, html: str, district_name: str):
-        soup = self.soup(html)
+        import json
+        import re
         items = []
 
-        # Âncoras de anúncio: preferir seletores estáveis usados pelo OLX
-        anchors = []
-        anchors.extend(soup.select('a[data-cy="listing-ad-title"]'))
-        anchors.extend(soup.select('a[data-testid="ad-title"]'))
-        anchors.extend(soup.select('a[href^="/d/anuncio/"]'))
-
-        seen_hrefs = set()
-        for a in anchors:
-            href = a.get("href")
-            if not href or href in seen_hrefs:
-                continue
-            seen_hrefs.add(href)
-
-            # Encontra o cartão pai para recolher preço/área em texto
-            card = a
-            for _ in range(7):
-                if card is None:
-                    break
-                txt = card.get_text(" ", strip=True)
-                if "€" in txt or "m²" in txt or "Área" in txt:
-                    break
-                card = card.parent
-
-            txt = (card.get_text(" ", strip=True) if card else a.get_text(" ", strip=True))
-            price = parse_eur_amount(txt)
-            area = parse_area_m2(txt)
-            eur_m2 = parse_eur_m2(txt)
-
-            if eur_m2 is None and price is not None and area:
-                eur_m2 = round(price / area, 2)
-
-            # Filtra anúncios sem qualquer dado útil
-            if price is None and area is None:
+        # OLX uses a JSON blob in window.__PRERENDERED_STATE__
+        # and also has structured data in ld+json
+        
+        # 1. Try ld+json first as it's very clean for titles, prices, and URLs
+        ld_json_matches = re.findall(r'<script [^>]*type="application/ld\+json">({.*?})</script>', html)
+        ld_ads = {}
+        for match_str in ld_json_matches:
+            try:
+                data = json.loads(match_str)
+                if data.get("@type") == "Product" and "offers" in data:
+                    offers = data["offers"].get("offers", [])
+                    for off in offers:
+                        url = off.get("url")
+                        if url:
+                            ld_ads[url] = {
+                                "price": off.get("price"),
+                                "title": off.get("name")
+                            }
+            except:
                 continue
 
-            items.append({
-                "source": self.name,
-                "district": district_name,
-                "title": a.get_text(" ", strip=True) or "OLX",
-                "price_eur": price,
-                "area_m2": area,
-                "eur_m2": eur_m2,
-                "url": absolutize(self.base, href),
-                "snippet": txt[:240],
-            })
+        # 2. Try window.__PRERENDERED_STATE__ for areas (m2)
+        match = re.search(r'window\.__PRERENDERED_STATE__\s*=\s*"({.*?})"', html)
+        if match:
+            try:
+                # The JSON is escaped inside the string
+                json_str = match.group(1).replace('\\"', '"').replace('\\\\', '\\')
+                data = json.loads(json_str)
+                
+                # Path: listing -> listing -> ads
+                ads = data.get("listing", {}).get("listing", {}).get("ads", [])
+                self.logger.info(f"Found {len(ads)} ads in OLX JSON data")
+                
+                for ad in ads:
+                    if not isinstance(ad, dict):
+                        continue
+                    title = ad.get("title")
+                    url = ad.get("url")
+                    if not title or not url:
+                        continue
+                    
+                    # Get price from ld_ads if possible (more reliable), else from here
+                    price = None
+                    if url in ld_ads:
+                        price = ld_ads[url].get("price")
+                    
+                    if price is None:
+                        price_info = ad.get("price", {})
+                        if isinstance(price_info, dict):
+                            # In some versions it might be here
+                            price = price_info.get("value")
+                            if isinstance(price, dict):
+                                price = price.get("value")
+                        else:
+                            price = price_info
+                    
+                    # Area and other params are in 'params' list
+                    area = None
+                    params = ad.get("params", [])
+                    for p in params:
+                        if p.get("key") in ("area", "m2", "area_util"):
+                            val = p.get("normalizedValue")
+                            if val:
+                                try:
+                                    area = float(val)
+                                except:
+                                    pass
+                            break
+                    
+                    eur_m2 = None
+                    if price and area:
+                        try:
+                            eur_m2 = round(float(price) / area, 2)
+                        except:
+                            pass
+                    
+                    items.append({
+                        "source": self.name,
+                        "district": district_name,
+                        "title": title,
+                        "price_eur": float(price) if price else None,
+                        "area_m2": area,
+                        "eur_m2": eur_m2,
+                        "url": url,
+                        "snippet": title,
+                    })
+                
+                if items:
+                    return items
+            except Exception as e:
+                self.logger.error(f"Error parsing OLX JSON: {e}")
+
+        # Fallback to HTML parsing if JSON fails (not implemented here as JSON is main)
+        return items
 
         # Dedupe interno por URL
         seen = set()

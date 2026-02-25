@@ -7,23 +7,29 @@ class SupercasaScraper(BaseScraper):
     base = "https://supercasa.pt"
 
     def build_url(self, district_slug: str, page: int, typology: str = "T2", search_type: str = "rent") -> str:
-        # /arrendar-casas/<distrito>-distrito/[com-tN] + /pagina-2
-        # /comprar-casas/<distrito>-distrito/[com-tN] + /pagina-2
+        # /arrendar-casas/<distrito>-distrito/[com-tN]
+        # Trying the older URL structure as it might be less protected
         t = (typology or "T2").upper().replace(" ", "")
         seg = ""
         if t.startswith("T") and "+" not in t and len(t) > 1 and t[1:].isdigit():
             seg = f"/com-{t.lower()}"
         
         mode = "arrendar" if search_type == "rent" else "comprar"
-        url = f"{self.base}/{mode}-casas/{district_slug}-distrito{seg}"
+        url = f"{self.base}/{mode}-casas/{district_slug}-distrito{seg}/"
         if page > 1:
-            url += f"/pagina-{page}"
+            url += f"pagina-{page}"
         return url
 
     def parse_listings(self, html: str, district_name: str, search_type: str = "rent"):
         soup = self.soup(html)
         items = []
 
+        # Try to find listings in search result cards
+        # Updated selectors for Supercasa
+        cards = soup.select(".property-card, .listing-item, [class*='card'], [class*='property']")
+        self.logger.info(f"Found {len(cards)} potential property cards in Supercasa")
+
+        # Fallback to links if no cards found
         # links de detalhe costumam ser /arrendamento-.../i1234567 ou /venda-.../i1234567
         mode_prefix = "/arrendamento-" if search_type == "rent" else "/venda-"
         for a in soup.select(f'a[href^="{mode_prefix}"], a[href*="/i"]'):
