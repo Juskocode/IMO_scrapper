@@ -6,46 +6,54 @@ class RemaxScraper(BaseScraper):
     base = "https://remax.pt"
 
     def build_url(self, district_slug: str, page: int, typology: str = "T2", search_type: str = "rent") -> str:
-        # /pt/arrendar/apartamento[/tN]/<distrito>
-        # /pt/comprar/apartamento[/tN]/<distrito>
-        t = (typology or "T2").upper().replace(" ", "")
-        seg = "apartamento"
-        if t.startswith("T") and "+" not in t and len(t) > 1 and t[1:].isdigit():
-            seg += f"/{t.lower()}"
-        
+        # Path-based URLs are more likely to be SSR-friendly on RE/MAX.
+        # Format: /pt/[arrendar|comprar]/[apartamento|moradia|...]/[district]/[typology]
         mode = "arrendar" if search_type == "rent" else "comprar"
-        url = f"{self.base}/pt/{mode}/{seg}/{district_slug}"
+        
+        t = (typology or "T2").upper().replace(" ", "")
+        typ_seg = ""
+        if t.startswith("T") and t[1:].isdigit():
+            typ_seg = f"/{t.lower()}"
+        
+        # We'll use 'apartamento' as default segment for now as it's the most common search
+        # district_slug should be just the name, e.g., 'leiria'
+        url = f"{self.base}/pt/{mode}/apartamento/{district_slug}{typ_seg}"
+        
         if page > 1:
+            # Query param for page seems to work with path-based URLs
             url += f"?page={page}"
+            
         return url
 
     def parse_listings(self, html: str, district_name: str):
         soup = self.soup(html)
         items = []
 
-        # links de detalhe (alargado): /pt/imoveis/... (a página de listagem já é de arrendamento)
-        anchors = []
-        anchors.extend(soup.select('a[href^="/pt/imoveis/"]'))
-        anchors.extend(soup.select('a[href*="/pt/imoveis/arrendamento-"]'))
+        self.logger.info(f"Parsing Remax listings. HTML length: {len(html)}")
 
-        seen_hrefs = set()
-        for a in anchors:
+        # The site uses several classes like 'listing-card', 'property-card', etc.
+        cards = soup.select('article, .property-card, .listing-card, [class*="PropertyCard"], [class*="ListingCard"]')
+        if not cards:
+             # Even broader search
+             cards = soup.select('div[class*="listing"], div[class*="property"]')
+             
+        self.logger.info(f"Found {len(cards)} potential listing cards via HTML")
+        
+        for card in cards:
+            a = card.select_one('a[href*="/imoveis/"], a[href*="/pt/"]')
+            if not a:
+                # find first link that looks like a detail page
+                a = card.find("a", href=True)
+                if not a or ("/pt/" not in a['href'] and "/imoveis/" not in a['href']):
+                    continue
+            
             href = a.get("href")
-            if not href or href in seen_hrefs:
+            txt = card.get_text(" ", strip=True)
+            
+            # Check for common listing features in text
+            if "€" not in txt and "m²" not in txt:
                 continue
-            seen_hrefs.add(href)
-
-            card = a
-            for _ in range(7):
-                if card is None:
-                    break
-                txt = card.get_text(" ", strip=True)
-                if "€" in txt or "m²" in txt or "Área" in txt:
-                    break
-                card = card.parent
-
-            txt = (card.get_text(" ", strip=True) if card else a.get_text(" ", strip=True))
-
+                
             price = parse_eur_amount(txt)
             area = parse_area_m2(txt)
             eur_m2 = parse_eur_m2(txt)
@@ -65,6 +73,45 @@ class RemaxScraper(BaseScraper):
                 "url": absolutize(self.base, href),
                 "snippet": txt[:240],
             })
+
+        # 3. Final desperate fallback: all links with /imoveis/ or /pt/
+        if not items:
+            anchors = soup.select('a[href*="/imoveis/"], a[href*="/pt/arrendar/"], a[href*="/pt/comprar/"]')
+            self.logger.info(f"Found {len(anchors)} potential listing anchors via raw links")
+            seen_hrefs = set()
+            for a in anchors:
+                href = a.get("href")
+                if not href or href in seen_hrefs:
+                    continue
+                seen_hrefs.add(href)
+                
+                # Try to find price/area in parent
+                card = a
+                found = False
+                for _ in range(7):
+                    if card is None: break
+                    ctx = card.get_text(" ", strip=True)
+                    if "€" in ctx or "m²" in ctx:
+                        found = True
+                        break
+                    card = card.parent
+                
+                if not found: continue
+                
+                txt = card.get_text(" ", strip=True)
+                price = parse_eur_amount(txt)
+                area = parse_area_m2(txt)
+                if price or area:
+                    items.append({
+                        "source": self.name,
+                        "district": district_name,
+                        "title": a.get_text(" ", strip=True) or "RE/MAX",
+                        "price_eur": price,
+                        "area_m2": area,
+                        "eur_m2": (price/area if price and area else None),
+                        "url": absolutize(self.base, href),
+                        "snippet": txt[:240],
+                    })
 
         seen = set()
         out = []
