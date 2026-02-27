@@ -154,6 +154,8 @@ def get_listings(district, pages, sources, filters, sort, limit, typology, searc
                 try:
                     res = f.result()
                     logger.info(f"Scraper finished. Got {len(res)} results.")
+                    for item in res:
+                        item['search_type'] = search_type
                     items.extend(res)
                 except Exception as e:
                     # não aborta tudo se uma fonte falhar
