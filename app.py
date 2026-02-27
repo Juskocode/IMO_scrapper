@@ -73,17 +73,37 @@ def api_listings():
     limit = max(10, min(limit, 1000))
 
     search_type = request.args.get("search_type", "rent")
-
-    results, stats = get_listings(
-        district=district,
-        pages=pages,
-        sources=sources,
-        filters=filters,
-        sort=sort,
-        limit=limit,
-        typology=typology,
-        search_type=search_type,
-    )
+    if search_type == "all":
+        # Fetch both and merge
+        res_rent, stats_rent = get_listings(
+            district=district, pages=pages, sources=sources, filters=filters,
+            sort=sort, limit=limit, typology=typology, search_type="rent"
+        )
+        res_buy, stats_buy = get_listings(
+            district=district, pages=pages, sources=sources, filters=filters,
+            sort=sort, limit=limit, typology=typology, search_type="buy"
+        )
+        results = res_rent + res_buy
+        # Combine stats roughly
+        stats = {
+            "count": stats_rent["count"] + stats_buy["count"],
+            "by_source": {}, # Could be combined but complicated
+            "median_eur_m2": None # Not meaningful to combine rent and buy medians
+        }
+        # re-sort combined results
+        from services.aggregator import _sort
+        results = _sort(results, sort)
+    else:
+        results, stats = get_listings(
+            district=district,
+            pages=pages,
+            sources=sources,
+            filters=filters,
+            sort=sort,
+            limit=limit,
+            typology=typology,
+            search_type=search_type,
+        )
     return jsonify({"results": results, "stats": stats})
 
 @app.get("/api/marks")
