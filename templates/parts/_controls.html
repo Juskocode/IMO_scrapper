@@ -1,0 +1,61 @@
+<div class="row g-3">
+  <div class="col-12">
+    <label class="form-label small fw-semibold">Distrito</label>
+    <select id="district" class="form-select">
+      {% for d in districts %}
+        <option value="{{d}}" {% if d == default_district %}selected{% endif %}>{{d}}</option>
+      {% endfor %}
+    </select>
+  </div>
+
+  <div class="col-12">
+    <label class="form-label small fw-semibold">Tipologia</label>
+    <select id="typology" class="form-select">
+      <option value="T*">T* (Todas)</option>
+      <option value="T0">T0</option>
+      <option value="T1">T1</option>
+      <option value="T1+1">T1+1</option>
+      <option value="T2" selected>T2</option>
+      <option value="T2+1">T2+1</option>
+      <option value="T3">T3</option>
+      <option value="T4">T4</option>
+      <option value="T5">T5</option>
+    </select>
+  </div>
+
+  <div class="col-12">
+    <label class="form-label small fw-semibold">Tipo</label>
+    <select id="search_type" class="form-select">
+      <option value="rent" selected>Arrendar</option>
+      <option value="buy">Comprar</option>
+      <option value="all">Ambos</option>
+    </select>
+  </div>
+
+  <div class="col-6">
+    <label class="form-label small fw-semibold">Páginas</label>
+    <input id="pages" type="number" min="1" max="10" class="form-control" value="2">
+  </div>
+
+  <div class="col-6">
+    <label class="form-label small fw-semibold">Limite</label>
+    <input id="limit" type="number" min="10" max="1000" class="form-control" value="200">
+  </div>
+
+  <div class="col-12">
+    <label class="form-label small fw-semibold">Ordenar</label>
+    <select id="sort" class="form-select">
+      <option value="eur_m2_asc" selected>€/m² (menor primeiro)</option>
+      <option value="eur_m2_desc">€/m² (maior primeiro)</option>
+      <option value="price_asc">Preço (menor primeiro)</option>
+      <option value="price_desc">Preço (maior primeiro)</option>
+    </select>
+  </div>
+
+  <div class="col-12 mt-4">
+    <button id="btnRefresh" class="btn btn-primary w-100 d-flex align-items-center justify-content-center">
+      <svg class="me-2" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M23 4v6h-6M1 20v-6h6M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15"></path></svg>
+      Atualizar Resultados
+    </button>
+  </div>
+</div>

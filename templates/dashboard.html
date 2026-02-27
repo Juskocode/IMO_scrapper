@@ -1,0 +1,52 @@
+{% extends "_layout.html" %}
+
+{% block head_extra %}
+  <title>Arrendamento — ordenar por €/m²</title>
+{% endblock %}
+
+{% block content %}
+  <header class="d-flex justify-content-between align-items-center mb-4">
+    <div>
+      <h3 class="mb-0">ImoDashboard</h3>
+      <p class="text-secondary mb-0">Market Analysis & Property Aggregator</p>
+    </div>
+    <div id="summary-widgets" class="d-flex gap-3">
+      <!-- Dynamic widgets will go here -->
+    </div>
+  </header>
+
+  <div class="row g-4">
+    <!-- Sidebar -->
+    <aside class="col-lg-3">
+      <div class="sticky-top" style="top: 24px; z-index: 1020;">
+        <div class="card p-3 mb-3">
+          <h6 class="mb-3">Search Configuration</h6>
+          {% include "parts/_controls.html" %}
+        </div>
+        
+        {% include "parts/_sources.html" %}
+      </div>
+    </aside>
+
+    <!-- Main Content -->
+    <main class="col-lg-9">
+      {% include "parts/_filters.html" %}
+      
+      <div class="mt-4">
+        {% include "parts/_charts.html" %}
+      </div>
+
+      <div class="table-container mt-4 p-0">
+        <div class="p-3 border-bottom d-flex justify-content-between align-items-center">
+          <h6 class="mb-0">Found Listings</h6>
+          {% include "parts/_table_controls.html" %}
+        </div>
+        {% include "parts/_table.html" %}
+      </div>
+    </main>
+  </div>
+{% endblock %}
+
+{% block scripts %}
+  <script type="module" src="{{ url_for('static', filename='js/main.js') }}"></script>
+{% endblock %}
