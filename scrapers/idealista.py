@@ -1,4 +1,6 @@
 import re
+import time
+import random
 from scrapers.base import BaseScraper
 from scrapers.utils import parse_eur_amount, parse_area_m2, parse_eur_m2, absolutize
 
@@ -73,9 +75,23 @@ class IdealistaScraper(BaseScraper):
 
     def scrape(self, district_name: str, district_slug: str, pages: int, typology: str = "T2", search_type: str = "rent"):
         out = []
-        for page in range(1, pages + 1):
+        # Human-like pagination: maintain a Referer that points to the previous page
+        # and visit the home page first if we don't have a session yet.
+        # Requirement: go to random pages until all entries are filled.
+        last_url = self.base + "/"
+        page_indices = list(range(1, pages + 1))
+        random.shuffle(page_indices)
+        
+        for page in page_indices:
             url = self.build_url(district_slug, page, typology, search_type)
-            html = self.fetch(url)
+            html = self.fetch(url, extra_headers={"Referer": last_url})
             out.extend(self.parse_listings(html, district_name))
+            last_url = url
             self.polite_sleep()
         return out
+
+    def polite_sleep(self):
+        # Idealista is very aggressive with bot detection, 
+        # so we use a much longer and more variable sleep time.
+        # Human-like: 7 to 15 seconds
+        time.sleep(random.uniform(7.0, 15.0))

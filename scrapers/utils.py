@@ -9,7 +9,7 @@ def slugify_pt(s: str) -> str:
     s = re.sub(r"\s+", "-", s)
     s = re.sub(r"[^a-z0-9\-]+", "", s)
     s = re.sub(r"-{2,}", "-", s)
-    return s
+    return
 
 def parse_eur_amount(text: str):
     if not text:
