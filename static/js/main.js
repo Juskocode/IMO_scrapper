@@ -1,8 +1,8 @@
-import { getListings } from './apiClient.js';
+import { getListings, getStats } from './apiClient.js';
 import { on, emit } from './eventBus.js';
 import * as marksRepo from './marksRepository.js';
 import { renderTable, wireTableActions } from './render/table.js';
-import { renderCharts } from './render/charts.js';
+import { renderCharts, renderInsights } from './render/charts.js';
 import { renderSummary } from './render/summary.js';
 
 let LAST_DATA = null;
@@ -70,6 +70,9 @@ async function refresh() {
     renderTable(LAST_DATA);
     const visible = renderSummary(LAST_DATA);
     renderCharts(visible);
+    
+    // Fetch and render global insights
+    getStats().then(renderInsights).catch(console.error);
   } catch (err) {
     console.error(err);
     // You could add a toast or alert here
@@ -83,8 +86,8 @@ function wireControls() {
   document.getElementById('btnRefresh').addEventListener('click', refresh);
   document.getElementById('typology').addEventListener('change', refresh);
   document.getElementById('search_type').addEventListener('change', refresh);
-  document.getElementById('hide_discarded').addEventListener('change', () => { saveUIState(); if (LAST_DATA) { renderTable(LAST_DATA); const visible = renderSummary(LAST_DATA); renderCharts(visible); } });
-  document.getElementById('only_loved').addEventListener('change', () => { saveUIState(); if (LAST_DATA) { renderTable(LAST_DATA); const visible = renderSummary(LAST_DATA); renderCharts(visible); } });
+  document.getElementById('hide_discarded').addEventListener('change', () => { saveUIState(); if (LAST_DATA) { renderTable(LAST_DATA); const visible = renderSummary(LAST_DATA); renderCharts(visible); getStats().then(renderInsights).catch(console.error); } });
+  document.getElementById('only_loved').addEventListener('change', () => { saveUIState(); if (LAST_DATA) { renderTable(LAST_DATA); const visible = renderSummary(LAST_DATA); renderCharts(visible); getStats().then(renderInsights).catch(console.error); } });
 }
 
 function wireSourcesAutoRefresh() {
@@ -100,6 +103,7 @@ function init() {
       renderTable(LAST_DATA);
       const visible = renderSummary(LAST_DATA);
       renderCharts(visible);
+      getStats().then(renderInsights).catch(console.error);
     }
   });
 
@@ -108,6 +112,7 @@ function init() {
       renderTable(LAST_DATA);
       const visible = renderSummary(LAST_DATA);
       renderCharts(visible);
+      getStats().then(renderInsights).catch(console.error);
     }
   });
 
