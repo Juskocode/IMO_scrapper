@@ -125,7 +125,8 @@ function renderSection(visible, type) {
       x: x.area_m2,
       y: x.price_eur,
       source: x.source,
-      title: x.title
+      title: x.title,
+      url: x.url
     }));
 
   if (charts[type].priceArea) charts[type].priceArea.destroy();
@@ -133,7 +134,7 @@ function renderSection(visible, type) {
   if (ctx3) {
     const datasets = labels.map(src => ({
       label: src,
-      data: scatterData.filter(d => d.source === src).map(d => ({ x: d.x, y: d.y, title: d.title, source: d.source })),
+      data: scatterData.filter(d => d.source === src).map(d => ({ x: d.x, y: d.y, title: d.title, source: d.source, url: d.url })),
       backgroundColor: getSourceColor(src),
       pointRadius: 5,
       pointHoverRadius: 8,
@@ -168,6 +169,19 @@ function renderSection(visible, type) {
       options: {
         responsive: true,
         maintainAspectRatio: false,
+        onClick: (evt, elements) => {
+          if (elements.length > 0) {
+            const index = elements[0].index;
+            const datasetIndex = elements[0].datasetIndex;
+            const dataPoint = charts[type].priceArea.data.datasets[datasetIndex].data[index];
+            if (dataPoint.url) {
+              window.open(dataPoint.url, '_blank');
+            }
+          }
+        },
+        onHover: (event, chartElement) => {
+          event.native.target.style.cursor = chartElement[0] ? 'pointer' : 'default';
+        },
         scales: {
           x: { title: { display: true, text: 'Área (m²)', font: { weight: 500 } }, grid: { borderDash: [4, 4] } },
           y: { title: { display: true, text: 'Preço (€)', font: { weight: 500 } }, grid: { borderDash: [4, 4] } }
@@ -184,6 +198,69 @@ function renderSection(visible, type) {
               }
             }
           }
+        }
+      }
+    });
+  }
+}
+
+let insightChart = null;
+
+export function renderInsights(data) {
+  const container = document.getElementById('chartsInsights');
+  if (!container) return;
+
+  if (!data || !data.yields || data.yields.length === 0) {
+    container.style.display = 'none';
+    return;
+  }
+  container.style.display = 'block';
+
+  const labels = data.yields.map(y => y.district);
+  const yieldValues = data.yields.map(y => y.yield * 100);
+  const yieldLabels = yieldValues.map(v => v.toFixed(2));
+  const colors = yieldValues.map(v => v >= 5 ? '#22c55e' : '#f59e0b');
+
+  if (insightChart) insightChart.destroy();
+  const ctx = document.getElementById('chartYieldByDistrict');
+  if (ctx) {
+    insightChart = new Chart(ctx, {
+      type: 'bar',
+      data: {
+        labels,
+        datasets: [
+          {
+            label: 'Gross Yield (%)',
+            data: yieldLabels,
+            backgroundColor: colors,
+            borderRadius: 6
+          },
+          {
+            label: 'Benchmark (5%)',
+            data: Array(labels.length).fill(5),
+            type: 'line',
+            borderColor: '#ef4444',
+            borderWidth: 2,
+            borderDash: [5, 5],
+            pointRadius: 0,
+            fill: false,
+            order: -1
+          }
+        ]
+      },
+      options: {
+        responsive: true,
+        plugins: {
+          title: { display: true, text: 'Gross Yield por Distrito (Estimação: Renda Anual / Preço Venda)', font: { weight: 'bold', size: 14 }, color: '#1e293b' },
+          legend: { display: true, position: 'bottom' }
+        },
+        scales: {
+          y: { 
+            beginAtZero: true, 
+            title: { display: true, text: 'Yield (%)' },
+            grid: { display: false } 
+          },
+          x: { grid: { display: false } }
         }
       }
     });
