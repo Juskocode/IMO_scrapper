@@ -20,6 +20,19 @@ export async function getListings(params) {
   return res.json();
 }
 
+export async function getStats() {
+  const res = await fetch('/api/stats');
+  if (!res.ok) throw new Error("Falha a carregar estatísticas");
+  return res.json();
+}
+
+export async function getHistory(params) {
+  const qs = buildQuery(params);
+  const res = await fetch(`/api/history?${qs}`);
+  if (!res.ok) throw new Error("Falha a carregar histórico");
+  return res.json();
+}
+
 export async function getMarks() {
   const res = await fetch('/api/marks');
   if (!res.ok) return {};
