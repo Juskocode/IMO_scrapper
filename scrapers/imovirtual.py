@@ -1,6 +1,6 @@
 import re
 from scrapers.base import BaseScraper
-from scrapers.utils import parse_eur_amount, parse_area_m2, parse_eur_m2, absolutize
+from scrapers.utils import parse_eur_amount, parse_area_m2, parse_eur_m2, parse_typology, absolutize
 
 class ImovirtualScraper(BaseScraper):
     name = "imovirtual"
@@ -45,11 +45,8 @@ class ImovirtualScraper(BaseScraper):
             txt = (card.get_text(" ", strip=True) if card else a.get_text(" ", strip=True))
             price = parse_eur_amount(txt)
             eur_m2 = parse_eur_m2(txt)
-            area = None
-
-            # imovirtual costuma ter área num bloco com "m²"
-            # (às vezes aparece como "Preço por metro quadrado 102 m²" => na prática é a área)
             area = parse_area_m2(txt)
+            typology = parse_typology(txt)
 
             if area is None and price is not None and eur_m2:
                 area = round(price / eur_m2, 2)
@@ -61,6 +58,9 @@ class ImovirtualScraper(BaseScraper):
             if not title:
                 continue
 
+            if not typology:
+                typology = parse_typology(title)
+
             items.append({
                 "source": self.name,
                 "district": district_name,
@@ -70,6 +70,7 @@ class ImovirtualScraper(BaseScraper):
                 "eur_m2": eur_m2,
                 "url": url,
                 "snippet": txt[:240],
+                "typology": typology,
             })
 
         # dedupe interno

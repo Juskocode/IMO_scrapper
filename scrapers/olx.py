@@ -1,5 +1,5 @@
 from scrapers.base import BaseScraper
-from scrapers.utils import parse_eur_amount, parse_area_m2, parse_eur_m2, absolutize
+from scrapers.utils import parse_eur_amount, parse_area_m2, parse_eur_m2, parse_typology, absolutize
 
 
 class OLXScraper(BaseScraper):
@@ -84,17 +84,29 @@ class OLXScraper(BaseScraper):
                     
                     # Area and other params are in 'params' list
                     area = None
+                    typology = None
                     params = ad.get("params", [])
                     for p in params:
-                        if p.get("key") in ("area", "m2", "area_util"):
+                        k = p.get("key")
+                        if k in ("area", "m2", "area_util"):
                             val = p.get("normalizedValue")
                             if val:
                                 try:
                                     area = float(val)
                                 except:
                                     pass
-                            break
+                        elif k in ("number_of_rooms", "rooms"):
+                            # This usually has values like "T2", "T3", or just "2", "3"
+                            val = p.get("normalizedValue")
+                            if val:
+                                if not val.startswith("T") and val.isdigit():
+                                    typology = "T" + val
+                                else:
+                                    typology = val.upper()
                     
+                    if not typology:
+                        typology = parse_typology(title)
+
                     eur_m2 = None
                     if price and area:
                         try:
@@ -111,6 +123,7 @@ class OLXScraper(BaseScraper):
                         "eur_m2": eur_m2,
                         "url": url,
                         "snippet": title,
+                        "typology": typology,
                     })
                 
                 if items:

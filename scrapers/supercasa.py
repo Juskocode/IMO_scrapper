@@ -1,6 +1,6 @@
 import re
 from scrapers.base import BaseScraper
-from scrapers.utils import parse_eur_amount, parse_area_m2, parse_eur_m2, absolutize
+from scrapers.utils import parse_eur_amount, parse_area_m2, parse_eur_m2, parse_typology, absolutize
 
 class SupercasaScraper(BaseScraper):
     name = "supercasa"
@@ -53,12 +53,16 @@ class SupercasaScraper(BaseScraper):
             price = parse_eur_amount(txt)
             area = parse_area_m2(txt)
             eur_m2 = parse_eur_m2(txt)
+            typology = parse_typology(txt)
 
             if eur_m2 is None and price is not None and area:
                 eur_m2 = round(price / area, 2)
 
             title = a.get_text(" ", strip=True) or "Anúncio"
             url = absolutize(self.base, href)
+
+            if not typology:
+                typology = parse_typology(title)
 
             # filtra lixo óbvio
             if price is None and area is None:
@@ -73,6 +77,7 @@ class SupercasaScraper(BaseScraper):
                 "eur_m2": eur_m2,
                 "url": url,
                 "snippet": txt[:240],
+                "typology": typology,
             })
 
         seen = set()
