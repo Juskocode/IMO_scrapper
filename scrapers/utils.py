@@ -9,7 +9,18 @@ def slugify_pt(s: str) -> str:
     s = re.sub(r"\s+", "-", s)
     s = re.sub(r"[^a-z0-9\-]+", "", s)
     s = re.sub(r"-{2,}", "-", s)
-    return
+    return s
+
+def parse_typology(text: str):
+    if not text:
+        return None
+    # Try to find T0, T1, T2, T2+1, etc.
+    # Matches: T2, T 2, T2+1, T 2 + 1, etc.
+    m = re.search(r"\bT\s*(\d+(?:\s*\+\s*\d+)?)\b", text, re.IGNORECASE)
+    if m:
+        t_val = m.group(1).replace(" ", "").upper()
+        return "T" + t_val
+    return None
 
 def parse_eur_amount(text: str):
     if not text:

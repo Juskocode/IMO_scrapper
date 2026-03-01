@@ -1,5 +1,5 @@
 from scrapers.base import BaseScraper
-from scrapers.utils import parse_eur_amount, parse_area_m2, parse_eur_m2, absolutize
+from scrapers.utils import parse_eur_amount, parse_area_m2, parse_eur_m2, parse_typology, absolutize
 
 class RemaxScraper(BaseScraper):
     name = "remax"
@@ -57,21 +57,27 @@ class RemaxScraper(BaseScraper):
             price = parse_eur_amount(txt)
             area = parse_area_m2(txt)
             eur_m2 = parse_eur_m2(txt)
+            typology = parse_typology(txt)
             if eur_m2 is None and price is not None and area:
                 eur_m2 = round(price / area, 2)
 
             if price is None and area is None:
                 continue
 
+            title = a.get_text(" ", strip=True) or "RE/MAX"
+            if not typology:
+                typology = parse_typology(title)
+
             items.append({
                 "source": self.name,
                 "district": district_name,
-                "title": a.get_text(" ", strip=True) or "RE/MAX",
+                "title": title,
                 "price_eur": price,
                 "area_m2": area,
                 "eur_m2": eur_m2,
                 "url": absolutize(self.base, href),
                 "snippet": txt[:240],
+                "typology": typology,
             })
 
         # 3. Final desperate fallback: all links with /imoveis/ or /pt/
@@ -101,16 +107,22 @@ class RemaxScraper(BaseScraper):
                 txt = card.get_text(" ", strip=True)
                 price = parse_eur_amount(txt)
                 area = parse_area_m2(txt)
+                typology = parse_typology(txt)
+                title = a.get_text(" ", strip=True) or "RE/MAX"
+                if not typology:
+                    typology = parse_typology(title)
+
                 if price or area:
                     items.append({
                         "source": self.name,
                         "district": district_name,
-                        "title": a.get_text(" ", strip=True) or "RE/MAX",
+                        "title": title,
                         "price_eur": price,
                         "area_m2": area,
                         "eur_m2": (price/area if price and area else None),
                         "url": absolutize(self.base, href),
                         "snippet": txt[:240],
+                        "typology": typology,
                     })
 
         seen = set()
