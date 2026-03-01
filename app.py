@@ -4,6 +4,7 @@ import threading
 from pathlib import Path
 from flask import Flask, render_template, request, jsonify
 from services.aggregator import get_listings, DISTRICTS
+from services.database import get_stats, get_historical_stats
 
 #aggregation
 
@@ -69,7 +70,7 @@ def api_listings():
     }
 
     sort = request.args.get("sort", "eur_m2_asc")
-    limit = int(request.args.get("limit", "200"))
+    limit = int(request.args.get("limit", "50"))
     limit = max(10, min(limit, 1000))
 
     search_type = request.args.get("search_type", "rent")
@@ -105,6 +106,21 @@ def api_listings():
             search_type=search_type,
         )
     return jsonify({"results": results, "stats": stats})
+
+@app.get("/api/stats")
+def api_stats():
+    return jsonify(get_stats())
+
+@app.get("/api/history")
+def api_history():
+    district = request.args.get("district")
+    search_type = request.args.get("search_type")
+    typology = request.args.get("typology")
+    return jsonify(get_historical_stats(district, search_type, typology))
+
+@app.get("/analytics")
+def analytics():
+    return render_template("analytics.html", districts=DISTRICTS)
 
 @app.get("/api/marks")
 def api_get_marks():

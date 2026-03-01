@@ -1,6 +1,8 @@
 import re
+import time
+import random
 from scrapers.base import BaseScraper
-from scrapers.utils import parse_eur_amount, parse_area_m2, parse_eur_m2, absolutize
+from scrapers.utils import parse_eur_amount, parse_area_m2, parse_eur_m2, parse_typology, absolutize
 
 class IdealistaScraper(BaseScraper):
     name = "idealista"
@@ -52,12 +54,17 @@ class IdealistaScraper(BaseScraper):
             price = parse_eur_amount(text)
             area = parse_area_m2(text)
             eur_m2 = parse_eur_m2(text)
+            typology = parse_typology(text)
 
             if eur_m2 is None and price is not None and area:
                 eur_m2 = round(price / area, 2)
 
             url = absolutize(self.base, href)
             title = a.get_text(" ", strip=True) or "Idealista"
+            
+            # If typology not in text, try title
+            if not typology:
+                typology = parse_typology(title)
 
             items.append({
                 "source": self.name,
@@ -68,14 +75,29 @@ class IdealistaScraper(BaseScraper):
                 "eur_m2": eur_m2,
                 "url": url,
                 "snippet": text[:240],
+                "typology": typology,
             })
         return items
 
     def scrape(self, district_name: str, district_slug: str, pages: int, typology: str = "T2", search_type: str = "rent"):
         out = []
-        for page in range(1, pages + 1):
+        # Human-like pagination: maintain a Referer that points to the previous page
+        # and visit the home page first if we don't have a session yet.
+        # Requirement: go to random pages until all entries are filled.
+        last_url = self.base + "/"
+        page_indices = list(range(1, pages + 1))
+        random.shuffle(page_indices)
+        
+        for page in page_indices:
             url = self.build_url(district_slug, page, typology, search_type)
-            html = self.fetch(url)
+            html = self.fetch(url, extra_headers={"Referer": last_url})
             out.extend(self.parse_listings(html, district_name))
+            last_url = url
             self.polite_sleep()
         return out
+
+    def polite_sleep(self):
+        # Idealista is very aggressive with bot detection, 
+        # so we use a much longer and more variable sleep time.
+        # Human-like: 7 to 15 seconds
+        time.sleep(random.uniform(7.0, 15.0))

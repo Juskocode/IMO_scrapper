@@ -1,0 +1,171 @@
+{% extends "_layout.html" %}
+
+{% block head_extra %}
+  <title>Analytics - Historical Trends</title>
+{% endblock %}
+
+{% block content %}
+<div class="container py-4">
+    <header class="d-flex justify-content-between align-items-center mb-5 pb-3 border-bottom">
+        <div>
+            <h2 class="fw-bold mb-1">Market Analytics</h2>
+            <p class="text-secondary mb-0">Track real estate trends over time</p>
+        </div>
+        <div>
+            <a href="/" class="btn btn-outline-primary btn-sm rounded-pill px-3">
+                <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" class="me-1"><path d="M19 12H5M12 19l-7-7 7-7"></path></svg>
+                Back to Dashboard
+            </a>
+        </div>
+    </header>
+
+    <div class="row g-4">
+        <aside class="col-lg-3">
+            <div class="card border-0 shadow-sm rounded-4 p-4 sticky-top" style="top: 24px;">
+                <h6 class="text-uppercase text-secondary fw-bold mb-4 small">Analysis Filters</h6>
+                
+                <div class="mb-4">
+                    <label class="form-label small fw-semibold text-dark">District</label>
+                    <select id="hist_district" class="form-select border-light-subtle rounded-3">
+                        <option value="">All Districts</option>
+                        {% for d in districts %}
+                        <option value="{{ d }}">{{ d }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                
+                <div class="mb-4">
+                    <label class="form-label small fw-semibold text-dark">Search Type</label>
+                    <select id="hist_search_type" class="form-select border-light-subtle rounded-3">
+                        <option value="rent" selected>Rent (Arrendar)</option>
+                        <option value="buy">Buy (Comprar)</option>
+                    </select>
+                </div>
+                
+                <div class="mb-4">
+                    <label class="form-label small fw-semibold text-dark">Typology</label>
+                    <select id="hist_typology" class="form-select border-light-subtle rounded-3">
+                        <option value="T2" selected>T2</option>
+                        <option value="T0">T0</option>
+                        <option value="T1">T1</option>
+                        <option value="T3">T3</option>
+                        <option value="T4">T4</option>
+                        <option value="T*">All (T*)</option>
+                    </select>
+                </div>
+                
+                <button id="btnUpdateHistory" class="btn btn-primary w-100 rounded-pill py-2 fw-semibold">
+                    Refresh Analysis
+                </button>
+            </div>
+        </aside>
+
+        <main class="col-lg-9">
+            <div class="row g-4">
+                <div class="col-12">
+                    <div class="card border-0 shadow-sm rounded-4 p-4">
+                        <div class="d-flex align-items-center mb-4">
+                            <div class="bg-primary-subtle p-2 rounded-3 me-3">
+                                <svg width="24" height="24" fill="none" stroke="#0d6efd" stroke-width="2" viewBox="0 0 24 24"><path d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                            </div>
+                            <h5 class="fw-bold mb-0">Average Price per m² Trend</h5>
+                        </div>
+                        <div style="height: 350px;">
+                            <canvas id="chartHistPriceM2"></canvas>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="col-12">
+                    <div class="card border-0 shadow-sm rounded-4 p-4">
+                        <div class="d-flex align-items-center mb-4">
+                            <div class="bg-success-subtle p-2 rounded-3 me-3">
+                                <svg width="24" height="24" fill="none" stroke="#198754" stroke-width="2" viewBox="0 0 24 24"><path d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"></path></svg>
+                            </div>
+                            <h5 class="fw-bold mb-0">Market Supply (Listing Count)</h5>
+                        </div>
+                        <div style="height: 350px;">
+                            <canvas id="chartHistCount"></canvas>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </main>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script type="module">
+    import { getHistory } from '/static/js/apiClient.js';
+    
+    let chartPriceM2 = null;
+    let chartCount = null;
+
+    async function updateCharts() {
+        const params = {
+            district: document.getElementById('hist_district').value,
+            search_type: document.getElementById('hist_search_type').value,
+            typology: document.getElementById('hist_typology').value
+        };
+
+        const data = await getHistory(params);
+        
+        const labels = data.map(d => d.date);
+        const prices = data.map(d => d.avg_eur_m2);
+        const counts = data.map(d => d.count);
+
+        if (chartPriceM2) chartPriceM2.destroy();
+        if (chartCount) chartCount.destroy();
+
+        const ctx1 = document.getElementById('chartHistPriceM2').getContext('2d');
+        chartPriceM2 = new Chart(ctx1, {
+            type: 'line',
+            data: {
+                labels,
+                datasets: [{
+                    label: 'Avg €/m²',
+                    data: prices,
+                    borderColor: '#0d6efd',
+                    backgroundColor: 'rgba(13, 110, 253, 0.1)',
+                    fill: true,
+                    tension: 0.3
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                scales: {
+                    y: { beginAtZero: false }
+                }
+            }
+        });
+
+        const ctx2 = document.getElementById('chartHistCount').getContext('2d');
+        chartCount = new Chart(ctx2, {
+            type: 'line',
+            data: {
+                labels,
+                datasets: [{
+                    label: 'Total Listings',
+                    data: counts,
+                    borderColor: '#198754',
+                    backgroundColor: 'rgba(25, 135, 84, 0.1)',
+                    fill: true,
+                    tension: 0.3
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                scales: {
+                    y: { beginAtZero: true }
+                }
+            }
+        });
+    }
+
+    document.getElementById('btnUpdateHistory').addEventListener('click', updateCharts);
+    window.addEventListener('load', updateCharts);
+</script>
+{% endblock %}
