@@ -1,4 +1,4 @@
- import sqlite3
+import sqlite3
 import datetime
 from pathlib import Path
 import os
@@ -23,7 +23,9 @@ def init_db():
             snippet TEXT,
             first_seen DATETIME,
             last_seen DATETIME,
-            typology TEXT
+            typology TEXT,
+            posted_at DATETIME,
+            actualized_at DATETIME
         )
     """)
     # Table for historical prices (to track updates)
@@ -52,9 +54,22 @@ def init_db():
     # Table for "famous indexes" or aggregates
     # We can also compute them on the fly
     
+    # Migration for existing DB
+    try:
+        cur.execute("ALTER TABLE listings ADD COLUMN posted_at DATETIME")
+    except sqlite3.OperationalError:
+        pass # Already exists
+
+    try:
+        cur.execute("ALTER TABLE listings ADD COLUMN actualized_at DATETIME")
+    except sqlite3.OperationalError:
+        pass # Already exists
+    
     cur.execute("CREATE INDEX IF NOT EXISTS idx_listings_search_type ON listings(search_type)")
     cur.execute("CREATE INDEX IF NOT EXISTS idx_listings_district ON listings(district)")
     cur.execute("CREATE INDEX IF NOT EXISTS idx_listings_typology ON listings(typology)")
+    cur.execute("CREATE INDEX IF NOT EXISTS idx_listings_posted_at ON listings(posted_at)")
+    cur.execute("CREATE INDEX IF NOT EXISTS idx_price_history_url ON price_history(url)")
     
     conn.commit()
     conn.close()
@@ -68,7 +83,7 @@ def save_listings(items, search_type, typology):
         if not url: continue
         
         # Check if exists
-        cur.execute("SELECT price_eur, first_seen, typology FROM listings WHERE url = ?", (url,))
+        cur.execute("SELECT price_eur, first_seen, typology, posted_at, actualized_at FROM listings WHERE url = ?", (url,))
         row = cur.fetchone()
         
         item_price = item.get("price_eur")
@@ -76,22 +91,26 @@ def save_listings(items, search_type, typology):
         item_typology = item.get("typology") or typology
         
         if row:
-            old_price, first_seen, old_typology = row
+            old_price, first_seen, old_typology, old_posted_at, old_actualized_at = row
             # Never overwrite a specific typology (T1, T2, etc.) with a generic one (T*)
             if (item_typology == "T*" or not item_typology) and old_typology and old_typology != "T*":
                 item_typology = old_typology
+            
+            # Keep original posted_at if we already have it
+            item_posted_at = item.get('posted_at') or old_posted_at
+            item_actualized_at = item.get('actualized_at') or old_actualized_at
             
             # Update entry
             cur.execute("""
                 UPDATE listings SET
                     source = ?, district = ?, title = ?, price_eur = ?, 
                     area_m2 = ?, eur_m2 = ?, search_type = ?, snippet = ?,
-                    last_seen = ?, typology = ?
+                    last_seen = ?, typology = ?, posted_at = ?, actualized_at = ?
                 WHERE url = ?
             """, (
                 item['source'], item['district'], item['title'], item_price,
                 item.get('area_m2'), item.get('eur_m2'), search_type, item.get('snippet'),
-                now, item_typology, url
+                now, item_typology, item_posted_at, item_actualized_at, url
             ))
             # If price changed, record history
             if item_price != old_price:
@@ -101,12 +120,12 @@ def save_listings(items, search_type, typology):
             cur.execute("""
                 INSERT INTO listings (
                     url, source, district, title, price_eur, area_m2, eur_m2, 
-                    search_type, snippet, first_seen, last_seen, typology
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    search_type, snippet, first_seen, last_seen, typology, posted_at, actualized_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """, (
                 url, item['source'], item['district'], item['title'], 
                 item_price, item.get('area_m2'), item.get('eur_m2'), 
-                search_type, item.get('snippet'), now, now, item_typology
+                search_type, item.get('snippet'), now, now, item_typology, item.get('posted_at'), item.get('actualized_at')
             ))
             cur.execute("INSERT INTO price_history (url, price_eur, date) VALUES (?, ?, ?)", (url, item_price, now))
             
@@ -246,6 +265,49 @@ def get_listings_from_db(district, search_type, typology, limit=None):
     rows = cur.fetchall()
     conn.close()
     
+    return [dict(r) for r in rows]
+
+def get_listing_history(url):
+    """Retrieves the price history for a specific listing."""
+    conn = sqlite3.connect(DB_PATH)
+    conn.row_factory = sqlite3.Row
+    cur = conn.cursor()
+    cur.execute("SELECT price_eur, date FROM price_history WHERE url = ? ORDER BY date ASC", (url,))
+    rows = cur.fetchall()
+    conn.close()
+    return [dict(r) for r in rows]
+
+def get_posted_stats(district=None, search_type=None, typology=None):
+    """Retrieves historical stats based on the posted_at date."""
+    conn = sqlite3.connect(DB_PATH)
+    conn.row_factory = sqlite3.Row
+    cur = conn.cursor()
+    
+    query = """
+        SELECT 
+            date(posted_at) as date, 
+            AVG(eur_m2) as avg_eur_m2, 
+            AVG(price_eur) as avg_price_eur, 
+            COUNT(*) as count
+        FROM listings 
+        WHERE posted_at IS NOT NULL
+    """
+    params = []
+    if district:
+        query += " AND district = ?"
+        params.append(district)
+    if search_type:
+        query += " AND search_type = ?"
+        params.append(search_type)
+    if typology:
+        query += " AND typology = ?"
+        params.append(typology)
+        
+    query += " GROUP BY date ORDER BY date ASC"
+    
+    cur.execute(query, params)
+    rows = cur.fetchall()
+    conn.close()
     return [dict(r) for r in rows]
 
 init_db()

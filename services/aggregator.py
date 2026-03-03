@@ -235,3 +235,20 @@ def get_listings(district, pages, sources, filters, sort, limit, typology, searc
     items = _sort(items, sort)
     items = items[:limit]
     return items, _stats(items)
+
+def bulk_scrape(pages_per_query=1):
+    """Iterates over all combinations of districts, search types, and typologies to fill the DB."""
+    typologies = ["T0", "T1", "T2", "T3", "T4"]
+    search_types = ["rent", "buy"]
+    
+    for district in DISTRICTS:
+        for st in search_types:
+            for typ in typologies:
+                logger.info(f"Bulk scraping: {district} | {st} | {typ}")
+                try:
+                    # We don't need the results here, just the side effect of saving to DB
+                    get_listings(district, pages_per_query, list(SCRAPERS.keys()), {}, "eur_m2_asc", 50, typ, st)
+                    # Small sleep to be polite across all scrapers
+                    time.sleep(2)
+                except Exception as e:
+                    logger.error(f"Error in bulk scrape for {district}/{st}/{typ}: {e}")

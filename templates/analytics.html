@@ -53,6 +53,22 @@
                         <option value="T*">All (T*)</option>
                     </select>
                 </div>
+
+                <div class="mb-4">
+                    <label class="form-label small fw-semibold text-dark">Data Mode</label>
+                    <div class="form-check">
+                        <input class="form-check-input" type="radio" name="hist_mode" id="mode_scrape" value="scrape" checked>
+                        <label class="form-check-label small" for="mode_scrape">
+                            By Scrape Date
+                        </label>
+                    </div>
+                    <div class="form-check">
+                        <input class="form-check-input" type="radio" name="hist_mode" id="mode_posted" value="posted">
+                        <label class="form-check-label small" for="mode_posted">
+                            By Original Posted Date
+                        </label>
+                    </div>
+                </div>
                 
                 <button id="btnUpdateHistory" class="btn btn-primary w-100 rounded-pill py-2 fw-semibold">
                     Refresh Analysis
@@ -106,7 +122,8 @@
         const params = {
             district: document.getElementById('hist_district').value,
             search_type: document.getElementById('hist_search_type').value,
-            typology: document.getElementById('hist_typology').value
+            typology: document.getElementById('hist_typology').value,
+            mode: document.querySelector('input[name="hist_mode"]:checked').value
         };
 
         const data = await getHistory(params);

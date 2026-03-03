@@ -33,6 +33,12 @@ export async function getHistory(params) {
   return res.json();
 }
 
+export async function getListingHistory(url) {
+  const res = await fetch(`/api/listing_history?url=${encodeURIComponent(url)}`);
+  if (!res.ok) throw new Error("Falha a carregar histórico do anúncio");
+  return res.json();
+}
+
 export async function getMarks() {
   const res = await fetch('/api/marks');
   if (!res.ok) return {};

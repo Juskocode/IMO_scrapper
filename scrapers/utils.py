@@ -67,5 +67,83 @@ def parse_eur_m2(text: str):
     except ValueError:
         return None
 
+def parse_portuguese_date(text: str):
+    if not text:
+        return None
+    
+    import datetime
+    
+    # "Publicado 26 de fevereiro de 2026"
+    # "Ontem às 15:30"
+    # "Hoje às 10:20"
+    # "15 de jan."
+    
+    months = {
+        "janeiro": 1, "fevereiro": 2, "março": 3, "abril": 4, "maio": 5, "junho": 6,
+        "julho": 7, "agosto": 8, "setembro": 9, "outubro": 10, "novembro": 11, "dezembro": 12,
+        "jan": 1, "fev": 2, "mar": 3, "abr": 4, "mai": 5, "jun": 6,
+        "jul": 7, "ago": 8, "set": 9, "out": 10, "nov": 11, "dez": 12
+    }
+    
+    t = text.lower().strip()
+    now = datetime.datetime.now()
+    
+    # Formato: "Publicado 26 de fevereiro de 2026"
+    m = re.search(r"(\d{1,2})\s+de\s+([a-zç]+)\s+de\s+(\d{4})", t)
+    if m:
+        day = int(m.group(1))
+        month_name = m.group(2)
+        year = int(m.group(3))
+        month = months.get(month_name, 1)
+        return datetime.datetime(year, month, day).isoformat()
+    
+    # Formato: "26 de fevereiro" (assume ano corrente)
+    m = re.search(r"(\d{1,2})\s+de\s+([a-zç]+)", t)
+    if m:
+        day = int(m.group(1))
+        month_name = m.group(2)
+        month = months.get(month_name)
+        if month:
+            # Se o mês já passou, assume este ano. Se for um mês futuro, pode ser do ano passado.
+            year = now.year
+            if month > now.month:
+                year -= 1
+            return datetime.datetime(year, month, day).isoformat()
+
+    # Formato: "Hoje às 15:30"
+    if "hoje" in t:
+        m = re.search(r"(\d{1,2}):(\d{2})", t)
+        if m:
+            h, mi = int(m.group(1)), int(m.group(2))
+            return now.replace(hour=h, minute=mi, second=0, microsecond=0).isoformat()
+        return now.isoformat()
+
+    # Formato: "Ontem às 15:30"
+    if "ontem" in t:
+        yesterday = now - datetime.timedelta(days=1)
+        m = re.search(r"(\d{1,2}):(\d{2})", t)
+        if m:
+            h, mi = int(m.group(1)), int(m.group(2))
+            return yesterday.replace(hour=h, minute=mi, second=0, microsecond=0).isoformat()
+        return yesterday.isoformat()
+
+    # Formato: "há 2 dias", "2 dias atrás"
+    m = re.search(r"(?:há|ha)\s+(\d+)\s+dias", t)
+    if m:
+        days = int(m.group(1))
+        return (now - datetime.timedelta(days=days)).isoformat()
+    
+    # Formato: "há 2 horas"
+    m = re.search(r"(?:há|ha)\s+(\d+)\s+horas", t)
+    if m:
+        hours = int(m.group(1))
+        return (now - datetime.timedelta(hours=hours)).isoformat()
+        
+    # Formato: "agora mesmo", "há instantes"
+    if "agora mesmo" in t or "instantes" in t:
+        return now.isoformat()
+
+    return None
+
 def absolutize(base: str, href: str) -> str:
     return urljoin(base, href)

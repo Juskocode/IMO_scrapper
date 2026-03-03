@@ -1,5 +1,8 @@
 from scrapers.base import BaseScraper
-from scrapers.utils import parse_eur_amount, parse_area_m2, parse_eur_m2, parse_typology, absolutize
+from scrapers.utils import (
+    parse_eur_amount, parse_area_m2, parse_eur_m2, 
+    parse_typology, parse_portuguese_date, absolutize
+)
 
 
 class OLXScraper(BaseScraper):
@@ -85,6 +88,7 @@ class OLXScraper(BaseScraper):
                     # Area and other params are in 'params' list
                     area = None
                     typology = None
+                    posted_at = None
                     params = ad.get("params", [])
                     for p in params:
                         k = p.get("key")
@@ -104,6 +108,28 @@ class OLXScraper(BaseScraper):
                                 else:
                                     typology = val.upper()
                     
+                    # Try to get posted_at from 'createdTime' and actualized_at from 'lastRefreshTime'
+                    # These are often in ISO format or timestamps in OLX JSON
+                    created_time = ad.get("createdTime")
+                    refresh_time = ad.get("lastRefreshTime")
+                    posted_at = None
+                    actualized_at = None
+                    
+                    def to_iso(val):
+                        if not val: return None
+                        if isinstance(val, (int, float)) or (isinstance(val, str) and val.isdigit()):
+                            import datetime
+                            try:
+                                # OLX sometimes uses milliseconds
+                                if int(val) > 10**11:
+                                    return datetime.datetime.fromtimestamp(int(val)/1000).isoformat()
+                                return datetime.datetime.fromtimestamp(int(val)).isoformat()
+                            except: return None
+                        return str(val)
+                    
+                    posted_at = to_iso(created_time)
+                    actualized_at = to_iso(refresh_time)
+
                     if not typology:
                         typology = parse_typology(title)
 
@@ -124,6 +150,8 @@ class OLXScraper(BaseScraper):
                         "url": url,
                         "snippet": title,
                         "typology": typology,
+                        "posted_at": posted_at,
+                        "actualized_at": actualized_at,
                     })
                 
                 if items:

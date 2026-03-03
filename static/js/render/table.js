@@ -1,5 +1,54 @@
 import { money, num } from '../utils/format.js';
 import { get as getMark, set as setMark } from '../marksRepository.js';
+import { getListingHistory } from '../apiClient.js';
+
+let priceHistoryChart = null;
+
+async function showPriceHistory(url) {
+  const history = await getListingHistory(url);
+  const modalEl = document.getElementById('priceHistoryModal');
+  const modal = bootstrap.Modal.getOrCreateInstance(modalEl);
+  modal.show();
+  
+  const labels = history.map(h => new Date(h.date).toLocaleDateString('pt-PT'));
+  const prices = history.map(h => h.price_eur);
+  
+  const ctx = document.getElementById('priceHistoryChart').getContext('2d');
+  if (priceHistoryChart) priceHistoryChart.destroy();
+  
+  priceHistoryChart = new Chart(ctx, {
+    type: 'line',
+    data: {
+      labels,
+      datasets: [{
+        label: 'Preço (€)',
+        data: prices,
+        borderColor: '#0d6efd',
+        backgroundColor: 'rgba(13, 110, 253, 0.1)',
+        fill: true,
+        tension: 0.1,
+        pointRadius: 5
+      }]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      scales: {
+        y: { beginAtZero: false }
+      }
+    }
+  });
+  
+  // List history in table
+  const list = document.getElementById('priceHistoryList');
+  let table = '<table class="table table-sm small"><thead><tr><th>Data</th><th>Preço</th></tr></thead><tbody>';
+  // Copy history and reverse it for the table
+  [...history].reverse().forEach(h => {
+    table += `<tr><td>${new Date(h.date).toLocaleString('pt-PT')}</td><td>${money(h.price_eur)}</td></tr>`;
+  });
+  table += '</tbody></table>';
+  list.innerHTML = table;
+}
 
 function sourceBadge(src) {
   const s = (src || '').toLowerCase();
@@ -84,6 +133,7 @@ export function renderTable(data) {
       <td class="text-end mono">${money(x.price_eur)}</td>
       <td class="text-end mono">${x.area_m2 ? num(x.area_m2) + ' m²' : '—'}</td>
       <td class="text-end mono">${x.eur_m2 ? num(x.eur_m2) : '—'}</td>
+      <td class="small text-secondary">${x.posted_at ? new Date(x.posted_at).toLocaleDateString('pt-PT') : '—'}</td>
       <td>
         <a href="${x.url}" target="_blank" rel="noopener" class="btn btn-sm btn-outline-primary d-inline-flex align-items-center gap-1">
           <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"></path></svg>
@@ -92,6 +142,9 @@ export function renderTable(data) {
       </td>
       <td class="actions text-nowrap">
         <div class="d-flex gap-2">
+          <button type="button" class="btn btn-outline-secondary btn-action btn-history" title="Ver histórico de preços" data-url="${x.url}">
+            <svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+          </button>
           <button type="button" class="btn btn-outline-secondary btn-action btn-love ${loved ? 'active' : ''}" title="${loved ? 'Remover favorito' : 'Marcar favorito'}" data-url="${x.url}">
             <svg width="18" height="18" fill="${loved ? 'currentColor' : 'none'}" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z"></path></svg>
           </button>
@@ -126,6 +179,13 @@ function updateSortIcons() {
 export function wireTableActions(onRefreshRequested) {
   // Existing row actions
   document.getElementById('tbody').addEventListener('click', async (ev) => {
+    const btnHistory = ev.target.closest('.btn-history');
+    if (btnHistory) {
+      const url = btnHistory.getAttribute('data-url');
+      showPriceHistory(url);
+      return;
+    }
+
     const btn = ev.target.closest('.btn-love, .btn-discard');
     if (!btn) return;
     const url = btn.getAttribute('data-url');

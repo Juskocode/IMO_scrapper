@@ -86,6 +86,17 @@ function wireControls() {
   document.getElementById('btnRefresh').addEventListener('click', refresh);
   document.getElementById('typology').addEventListener('change', refresh);
   document.getElementById('search_type').addEventListener('change', refresh);
+  document.getElementById('btnBulkScrape').addEventListener('click', async () => {
+    if (!confirm('This will start a full market scrape in the background. It may take a long time. Continue?')) return;
+    try {
+      const pages = document.getElementById('pages').value;
+      const res = await fetch(`/api/bulk_scrape?pages=${pages}`, { method: 'POST' });
+      const data = await res.json();
+      alert(data.message);
+    } catch (e) {
+      alert('Error starting bulk scrape: ' + e.message);
+    }
+  });
   document.getElementById('hide_discarded').addEventListener('change', () => { saveUIState(); if (LAST_DATA) { renderTable(LAST_DATA); const visible = renderSummary(LAST_DATA); renderCharts(visible); getStats().then(renderInsights).catch(console.error); } });
   document.getElementById('only_loved').addEventListener('change', () => { saveUIState(); if (LAST_DATA) { renderTable(LAST_DATA); const visible = renderSummary(LAST_DATA); renderCharts(visible); getStats().then(renderInsights).catch(console.error); } });
 }
