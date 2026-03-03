@@ -3,8 +3,8 @@ import json
 import threading
 from pathlib import Path
 from flask import Flask, render_template, request, jsonify
-from services.aggregator import get_listings, DISTRICTS
-from services.database import get_stats, get_historical_stats
+from services.aggregator import get_listings, DISTRICTS, bulk_scrape
+from services.database import get_stats, get_historical_stats, get_listing_history, get_posted_stats
 
 #aggregation
 
@@ -116,7 +116,26 @@ def api_history():
     district = request.args.get("district")
     search_type = request.args.get("search_type")
     typology = request.args.get("typology")
+    mode = request.args.get("mode", "scrape") # "scrape" or "posted"
+    
+    if mode == "posted":
+        return jsonify(get_posted_stats(district, search_type, typology))
     return jsonify(get_historical_stats(district, search_type, typology))
+
+@app.get("/api/listing_history")
+def api_listing_history():
+    url = request.args.get("url")
+    if not url:
+        return jsonify({"error": "missing url"}), 400
+    return jsonify(get_listing_history(url))
+
+@app.post("/api/bulk_scrape")
+def api_bulk_scrape():
+    pages = int(request.args.get("pages", "1"))
+    # Run in background
+    thread = threading.Thread(target=bulk_scrape, args=(pages,))
+    thread.start()
+    return jsonify({"ok": True, "message": "Bulk scrape started in background."})
 
 @app.get("/analytics")
 def analytics():
