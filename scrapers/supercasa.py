@@ -1,6 +1,9 @@
 import re
 from scrapers.base import BaseScraper
-from scrapers.utils import parse_eur_amount, parse_area_m2, parse_eur_m2, parse_typology, absolutize
+from scrapers.utils import (
+    parse_eur_amount, parse_area_m2, parse_eur_m2, 
+    parse_typology, parse_portuguese_date, absolutize
+)
 
 class SupercasaScraper(BaseScraper):
     name = "supercasa"
@@ -54,6 +57,10 @@ class SupercasaScraper(BaseScraper):
             area = parse_area_m2(txt)
             eur_m2 = parse_eur_m2(txt)
             typology = parse_typology(txt)
+            posted_at = parse_portuguese_date(txt)
+            actualized_at = None
+            if "actualizado" in txt.lower() or "atualizado" in txt.lower():
+                actualized_at = posted_at
 
             if eur_m2 is None and price is not None and area:
                 eur_m2 = round(price / area, 2)
@@ -78,6 +85,8 @@ class SupercasaScraper(BaseScraper):
                 "url": url,
                 "snippet": txt[:240],
                 "typology": typology,
+                "posted_at": posted_at,
+                "actualized_at": actualized_at,
             })
 
         seen = set()

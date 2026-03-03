@@ -2,7 +2,10 @@ import re
 import time
 import random
 from scrapers.base import BaseScraper
-from scrapers.utils import parse_eur_amount, parse_area_m2, parse_eur_m2, parse_typology, absolutize
+from scrapers.utils import (
+    parse_eur_amount, parse_area_m2, parse_eur_m2, 
+    parse_typology, parse_portuguese_date, absolutize
+)
 
 class IdealistaScraper(BaseScraper):
     name = "idealista"
@@ -55,7 +58,13 @@ class IdealistaScraper(BaseScraper):
             area = parse_area_m2(text)
             eur_m2 = parse_eur_m2(text)
             typology = parse_typology(text)
-
+            posted_at = parse_portuguese_date(text)
+            actualized_at = None
+            if "actualizado" in text.lower() or "atualizado" in text.lower():
+                actualized_at = posted_at
+                # If it's updated, we don't know when it was originally posted, 
+                # but we can keep it as None or use actualized_at if posted_at is missing.
+            
             if eur_m2 is None and price is not None and area:
                 eur_m2 = round(price / area, 2)
 
@@ -65,6 +74,9 @@ class IdealistaScraper(BaseScraper):
             # If typology not in text, try title
             if not typology:
                 typology = parse_typology(title)
+
+            if not posted_at:
+                posted_at = parse_portuguese_date(title)
 
             items.append({
                 "source": self.name,
@@ -76,6 +88,8 @@ class IdealistaScraper(BaseScraper):
                 "url": url,
                 "snippet": text[:240],
                 "typology": typology,
+                "posted_at": posted_at,
+                "actualized_at": actualized_at,
             })
         return items
 
