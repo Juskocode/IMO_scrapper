@@ -1,16 +1,16 @@
 # ImoDashboard
 
-Dashboard simples em Flask que agrega anúncios de imobiliário (arrendamento e venda) em Portugal continental, calcula €/m² e permite ordenar/filtrar os resultados.
+Simple Flask-based dashboard that aggregates real estate listings (rent and sale) in mainland Portugal, calculates €/m², and allows sorting/filtering of results.
 
-## Funcionalidades
-- **Agregação Multi-fonte**: Procura em vários portais imobiliários em simultâneo.
-- **Arrendar ou Comprar**: Suporte para pesquisa de imóveis para arrendamento ou venda.
-- **RAG & Contexto**: Integração com modelo RAG (mcp) para entender o contexto das regras de scraping definidas em YAML.
-- **Filtros Avançados**: Filtra por preço, área, tipologia e €/m².
-- **Favoritos e Rejeitados**: Marca anúncios como "gosto" ou "ignorar" para futuro sistema de recomendação.
-- **Gráficos e Estatísticas**: Visualização rápida da distribuição de preços e áreas.
+## Features
+- **Multi-source Aggregation**: Searches across multiple real estate portals simultaneously.
+- **Rent or Buy**: Support for searching properties for rent or sale.
+- **RAG & Context**: Integration with a RAG model (mcp) to understand the context of scraping rules defined in YAML.
+- **Advanced Filters**: Filter by price, area, typology, and €/m².
+- **Favorites and Rejections**: Mark listings as "loved" or "ignored" for a future recommendation system.
+- **Charts and Statistics**: Quick visualization of price and area distributions, including regression analysis.
 
-## Fontes suportadas
+## Supported Sources
 - Idealista (`idealista`)
 - Imovirtual (`imovirtual`)
 - SUPERCASA (`supercasa`)
@@ -18,44 +18,85 @@ Dashboard simples em Flask que agrega anúncios de imobiliário (arrendamento e 
 - RE/MAX (`remax`)
 - OLX (`olx`)
 
-## Como correr
-1. Criar virtualenv e instalar dependências:
+## How to Run
+1. Create a virtualenv and install dependencies:
    ```bash
    pip install -r requirements.txt
    ```
-2. Correr a app:
+2. Run the app:
    ```bash
    python app.py
    ```
-   - Variáveis opcionais: `HOST` e `PORT` (por omissão `127.0.0.1:5000`).
+   - Optional variables: `HOST` and `PORT` (defaults to `127.0.0.1:5000`).
 
-3. Abrir no browser: http://127.0.0.1:5000/
+3. Open in your browser: http://127.0.0.1:5000/
 
-## Utilização
-- Escolhe o distrito, tipo de negócio (Arrendar/Comprar), tipologia, número de páginas por fonte e as fontes (checkboxes).
-- Define filtros de preço/área e a ordenação desejada.
-- Clica em "Atualizar" para carregar os dados.
-- Resumo e gráficos rápidos ajudam a perceber a distribuição por fonte e a mediana atual de €/m².
-- Usa os ícones de coração ou lixo para treinar o teu futuro sistema de recomendação pessoal.
+## Usage
+- Choose the district, business type (Rent/Buy), typology, number of pages per source, and the sources (checkboxes).
+- Define price/area filters and the desired sorting.
+- Click "Update" to load the data.
+- Summary and quick charts help you understand the distribution by source and the current median €/m².
+- Use the heart or trash icons to train your future personal recommendation system.
 
-## Notas técnicas
-- Scrapers implementados em `scrapers/` com uma base comum (`BaseScraper`).
-- O serviço agregador em `services/aggregator.py` faz cache leve (10 min), deduplica por URL e ordena/aplica filtros.
-- O frontend usa Bootstrap e Chart.js; JavaScript modularizado em `static/js/`.
-- Respeito por "polite sleep" entre páginas para reduzir carga nos sites.
+## Technical Notes
+- Scrapers implemented in `scrapers/` with a common base (`BaseScraper`).
+- Aggregator service in `services/aggregator.py` provides lightweight caching (10 min), URL deduplication, and sorting/filtering.
+- Frontend uses Bootstrap and Chart.js; modularized JavaScript in `static/js/`.
+- Respects "polite sleep" between pages to reduce load on the target sites.
+- Includes data cleaning to filter out suspicious listings (e.g., zero prices or extreme price/m²).
 
-## Estrutura do Projeto
-- `app.py`: Servidor Flask e API.
-- `scrapers/`: Lógica de extração de dados para cada site.
-- `services/aggregator.py`: Orquestração de scrapers e processamento de dados.
-- `templates/` & `static/`: Interface de utilizador.
-- `marks.json`: Persistência local das tuas preferências.
+## Architecture and Data Flow
 
-## Estrutura de templates e assets (refactor)
-- A página principal é `templates/dashboard.html` que estende `templates/_layout.html`.
-- Componentes Jinja em `templates/parts/`:
+The project follows a modular architecture that connects several components to provide real-time data and historical analysis.
+
+### Overall Scheme
+1.  **Frontend**: Built with Bootstrap 5 and modular ES Modules (Chart.js, EventBus). Communicates with the backend via AJAX.
+2.  **API (Flask)**: Handles client requests, manages user marks, and orchestrates the aggregation process.
+3.  **Aggregator Service**: Logic for coordinating scrapers, database interactions, deduplication, and data cleaning.
+4.  **Scrapers**: Specialized modules for each portal (Idealista, OLX, etc.) that extract raw data using BeautifulSoup.
+5.  **Database (SQLite)**: Stores listing details, historical price changes, and daily market statistics.
+
+### Data Life Cycle: Scraping to DB
+- **Request**: When a user queries a district/typology combination not sufficiently present in the DB, a background scrape is triggered.
+- **Extraction**: Multiple scrapers run in parallel via `ThreadPoolExecutor`, fetching and parsing search results.
+- **Normalization**: Raw data is cleaned (removing outliers/suspicious listings) and typologies are normalized (e.g., "T2+1" -> "T2").
+- **Persistence**: 
+    - **`listings` table**: Stores current listing details (URL, price, area, source).
+    - **`listing_history` table**: Captures every price change detected for a specific URL.
+    - **`stats_daily` table**: Aggregates daily snapshots of median prices and listing counts.
+
+## API Documentation
+
+The dashboard interacts with the Flask backend through the following endpoints:
+
+| Endpoint | Method | Description | Parameters |
+| :--- | :--- | :--- | :--- |
+| `/api/listings` | `GET` | Main data endpoint. Fetches, scrapes (if needed), filters, and returns listings. | `district`, `pages`, `typology`, `sources[]`, `search_type`, `min_price`, etc. |
+| `/api/stats` | `GET` | Returns overall database statistics (total listings per source). | None |
+| `/api/history` | `GET` | Returns historical median price trends for a specific search. | `district`, `search_type`, `typology`, `mode` (scrape/posted) |
+| `/api/listing_history` | `GET` | Returns the price evolution of a single listing. | `url` |
+| `/api/marks` | `GET` | Fetches the user's "loved" and "discarded" listing map. | None |
+| `/api/marks` | `POST` | Saves a new mark for a listing. | Body: `{"url": "...", "state": "loved\|discarded"}` |
+| `/api/bulk_scrape`| `POST` | Triggers a comprehensive background scrape for all districts. | `pages` |
+
+### Example Query
+`GET /api/listings?district=Lisboa&typology=T2&search_type=rent&limit=50`
+This request will first check the local `data.db` for Lisbon T2 rentals. If not found, it will parallel-scrape the selected portals, store the new data, and return a JSON containing both the results and summary statistics.
+
+## Project Structure
+- `app.py`: Flask server and API endpoints.
+- `scrapers/`: Data extraction logic for each site. See [scrapers/README.md](scrapers/README.md) for details.
+- `services/`: Core logic for data aggregation and database management. See [services/README.md](services/README.md) for details.
+- `static/`: Frontend assets (JS, CSS). See [static/README.md](static/README.md) for details.
+- `templates/`: Jinja2 templates for the UI. See [templates/README.md](templates/README.md) for details.
+- `marks.json`: Local persistence for your favorites/rejections.
+- `data.db`: SQLite database for listings and history.
+
+## Refactored UI Structure
+- The main page is `templates/dashboard.html`, which extends `templates/_layout.html`.
+- Jinja components in `templates/parts/`:
   - `_controls.html`, `_sources.html`, `_filters.html`, `_charts.html`, `_table_controls.html`, `_table.html`.
-- CSS personalizado em `static/css/app.css`.
-- JavaScript foi modularizado (ES Modules) sob `static/js/`:
-  - `apiClient.js` (Facade), `eventBus.js` (Observer), `marksRepository.js` (Repository), `utils/format.js`, renderizadores em `render/` (`table.js`, `charts.js`, `summary.js`) e `main.js` (bootstrap).
+- Custom CSS in `static/css/app.css`.
+- Modularized JavaScript (ES Modules) under `static/js/`:
+  - `apiClient.js` (Facade), `eventBus.js` (Observer), `marksRepository.js` (Repository), `utils/format.js`, and renderers in `render/` (`table.js`, `charts.js`, `summary.js`).
 
