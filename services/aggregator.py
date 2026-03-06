@@ -63,6 +63,37 @@ def _apply_filters(items, filters):
         out.append(x)
     return out
 
+def _clean_data(items, search_type="rent"):
+    """Remove suspicious/noisy data (outliers, zero values, placeholder prices)"""
+    out = []
+    for x in items:
+        p = x.get("price_eur")
+        a = x.get("area_m2")
+        e = x.get("eur_m2")
+        
+        # 1. Basic sanity checks (zero or negative)
+        if p is None or p <= 0 or a is None or a <= 0:
+            continue
+            
+        # 2. Heuristic for rent: usually prices are > 100 and area > 10
+        if search_type == "rent":
+            if p < 100 or a < 10:
+                continue
+            # Very high price/m2 for rent (> 200) is often a room or error, unless it's luxury
+            if e and e > 200:
+                continue
+        
+        # 3. Heuristic for buy: usually prices are > 10000 and area > 20
+        if search_type == "buy":
+            if p < 10000 or a < 20:
+                continue
+            # Very low price/m2 for buy (< 100) is usually land or error
+            if e and e < 100:
+                continue
+                
+        out.append(x)
+    return out
+
 def _sort(items, sort):
     def key_eurm2(x):
         v = x.get("eur_m2")
@@ -230,6 +261,7 @@ def get_listings(district, pages, sources, filters, sort, limit, typology, searc
     # Filtro adicional por tipologia (por segurança), sobretudo útil quando uma fonte não suporta o filtro via URL
     items = _apply_sources(items, sources)
     items = _apply_typology(items, typology)
+    items = _clean_data(items, search_type)
 
     items = _apply_filters(items, filters)
     items = _sort(items, sort)

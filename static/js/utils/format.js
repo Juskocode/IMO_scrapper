@@ -29,5 +29,33 @@ export function linearRegression(data) {
   if (den === 0) return null;
   const m = (n * sxy - sx * sy) / den;
   const b = (sy - m * sx) / n;
-  return { m, b };
+  
+  // Calculate R-squared
+  const yMean = sy / n;
+  let ssTot = 0;
+  let ssRes = 0;
+  for (const d of data) {
+    ssTot += Math.pow(d.y - yMean, 2);
+    ssRes += Math.pow(d.y - (m * d.x + b), 2);
+  }
+  const r2 = ssTot === 0 ? 0 : 1 - (ssRes / ssTot);
+  
+  return { m, b, r2 };
+}
+
+export function cleanOutliers(data) {
+  if (data.length < 5) return data;
+  
+  // Sort by price/m2 to find outliers in value
+  const values = data.map(d => d.y / d.x).sort((a, b) => a - b);
+  const q1 = values[Math.floor(values.length * 0.25)];
+  const q3 = values[Math.floor(values.length * 0.75)];
+  const iqr = q3 - q1;
+  const low = q1 - 1.5 * iqr;
+  const high = q3 + 1.5 * iqr;
+  
+  return data.filter(d => {
+    const ratio = d.y / d.x;
+    return ratio >= low && ratio <= high;
+  });
 }
