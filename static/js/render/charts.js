@@ -1,4 +1,4 @@
-import { median, linearRegression } from '../utils/format.js';
+import { median, linearRegression, cleanOutliers } from '../utils/format.js';
 
 let charts = {
   rent: { bySource: null, median: null, priceArea: null },
@@ -119,7 +119,7 @@ function renderSection(visible, type) {
   }
 
   // 3. Price vs Area Scatter Plot
-  const scatterData = visible
+  let scatterData = visible
     .filter(x => x.price_eur && x.area_m2)
     .map(x => ({
       x: x.area_m2,
@@ -128,6 +128,9 @@ function renderSection(visible, type) {
       title: x.title,
       url: x.url
     }));
+
+  // Clean data to reduce noise and improve regression
+  scatterData = cleanOutliers(scatterData);
 
   if (charts[type].priceArea) charts[type].priceArea.destroy();
   const ctx3 = document.getElementById('chartPriceArea' + suffix);
@@ -147,8 +150,11 @@ function renderSection(visible, type) {
     if (reg) {
       const minX = Math.min(...scatterData.map(d => d.x));
       const maxX = Math.max(...scatterData.map(d => d.x));
+      const sign = reg.b >= 0 ? '+' : '-';
+      const formula = `y = ${reg.m.toFixed(2)}x ${sign} ${Math.abs(reg.b).toFixed(0)}`;
+      
       datasets.push({
-        label: 'Tendência (Linear)',
+        label: `Tendência: ${formula} (R²: ${reg.r2.toFixed(2)})`,
         data: [
           { x: minX, y: reg.m * minX + reg.b },
           { x: maxX, y: reg.m * maxX + reg.b }
