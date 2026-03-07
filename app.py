@@ -4,7 +4,8 @@ import threading
 from pathlib import Path
 from flask import Flask, render_template, request, jsonify
 from services.aggregator import get_listings, DISTRICTS, bulk_scrape
-from services.database import get_stats, get_historical_stats, get_listing_history, get_posted_stats
+from services.processor import apply_sort
+from services.db import get_stats, get_historical_stats, get_listing_history, get_posted_stats
 
 #aggregation
 
@@ -92,8 +93,7 @@ def api_listings():
             "median_eur_m2": None # Not meaningful to combine rent and buy medians
         }
         # re-sort combined results
-        from services.aggregator import _sort
-        results = _sort(results, sort)
+        results = apply_sort(results, sort)
     else:
         results, stats = get_listings(
             district=district,
