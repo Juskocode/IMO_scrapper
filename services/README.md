@@ -6,31 +6,39 @@ This directory contains the core application services for data processing, aggre
 
 ### `aggregator.py`
 
-This service is responsible for orchestrating the various scrapers and processing the results.
+Orchestrates the data collection and merging process. It coordinates between scrapers, the database, and the data processor.
 
-- **`get_listings`**: The main entry point for fetching data.
-  - Checks the database for existing results first.
-  - If results are missing or insufficient, triggers the appropriate scrapers in parallel using a `ThreadPoolExecutor`.
-  - Deduplicates listings by URL.
-  - Cleans data to remove suspicious listings (outliers, zero prices, etc.).
-  - Applies user-specified filters and sorting.
-  - Returns processed items and basic statistics.
-- **`bulk_scrape`**: Iterates over all district/typology/business type combinations to populate the database in the background.
-- **Caching**:
-  - `CACHE` (TTLCache): Stores full query results for 10 minutes.
-  - `LISTINGS_CACHE` (LRUCache): Stores individual listing details for quick access.
+- **`get_listings`**: Orchestrates fetching results for a given query.
+  - Checks the database first.
+  - If results are insufficient, triggers selected scrapers in parallel using `ThreadPoolExecutor`.
+  - Deduplicates by URL.
+  - Clean and saves results via `services/processor.py` and `services/db/`.
+  - Applies filters/typology logic and returns results with statistics.
+- **`bulk_scrape`**: Iteratively populates the database for all districts and typical typologies.
+- **`run_maintenance`**: Scans the database for district mismatches and fixes them.
+- **Caching**: Uses `TTLCache` to store query results for 10 minutes.
 
-### `database.py`
+### `db/`
 
-Handles all interactions with the SQLite database (`data.db`).
+Handles all interactions with the SQLite database (`data.db`). Split into:
+- `connection.py`: Manages the database connection and path.
+- `repository.py`: Core CRUD operations for listings and history. Implements an `is_active` status for listings.
+- `stats.py`: Aggregation logic for daily and historical statistics.
 
-- **Database Schema**:
-  - `listings`: Stores details for each real estate listing, including price, area, and first/last seen dates.
-  - `listing_history`: Tracks price changes over time for individual listings.
-  - `stats_daily`: Stores aggregated daily statistics (median price, count) per district, typology, and business type.
-- **Key Functions**:
-  - `save_listings`: Bulk inserts or updates listings and their history.
-  - `get_listings_from_db`: Retrieves stored listings with filtering.
-  - `update_daily_stats`: Aggregates current data into daily snapshots for historical analysis.
-  - `get_historical_stats`: Provides data for trend charts.
-  - `get_posted_stats`: Analyzes when listings were first seen.
+### `processor.py`
+
+New service that encapsulates data transformation and evaluation logic.
+
+- **`clean_data`**: Removes junk entries (e.g., zero prices or missing areas).
+- **`apply_filters`**: Filters results based on user-defined price/area ranges and specific keywords.
+- **`apply_sort`**: Sorts items based on price or price per m².
+- **`calculate_stats`**: Generates source-based distributions and median price per m².
+- **`DISTRICTS`**: Centralized list of supported Portuguese districts.
+
+### `property_matcher.py`
+
+Specialized logic for property typology management.
+
+- **`normalize_typology`**: Ensures a consistent format (e.g., "T1", "T2+1") for all processing.
+- **`typology_regex`**: Generates complex regular expressions for accurate matching in raw text descriptions.
+- **`match_property_typology`**: Filters a list of items using typology regex matching.

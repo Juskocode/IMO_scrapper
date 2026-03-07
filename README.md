@@ -38,12 +38,24 @@ Simple Flask-based dashboard that aggregates real estate listings (rent and sale
 - Summary and quick charts help you understand the distribution by source and the current median €/m².
 - Use the heart or trash icons to train your future personal recommendation system.
 
+## Scheduled Tasks (Cron)
+To keep the database updated automatically and perform maintenance (fixing district mismatches and optimizing storage), a cron job can be set up to run daily.
+
+### Example Crontab
+```bash
+# Run daily at 00:00
+0 0 * * * cd /path/to/ImoDashboard && /path/to/python3 automation/cron_bulk_scrape.py >> cron_output.log 2>&1
+```
+*Note: Ensure you use the full path to the project and the python executable (e.g. from your virtualenv).*
+
 ## Technical Notes
 - Scrapers implemented in `scrapers/` with a common base (`BaseScraper`).
 - Aggregator service in `services/aggregator.py` provides lightweight caching (10 min), URL deduplication, and sorting/filtering.
+- **District Validation**: Includes a heuristic to detect and fix listings that appear in the wrong district (fixing ~10% mismatch issues).
+- **Database Maintenance**: Includes periodic storage optimization; all historical data is preserved indefinitely.
 - Frontend uses Bootstrap and Chart.js; modularized JavaScript in `static/js/`.
 - Respects "polite sleep" between pages to reduce load on the target sites.
-- Includes data cleaning to filter out suspicious listings (e.g., zero prices or extreme price/m²).
+- Includes basic data validation to filter out junk entries (e.g., zero prices or missing areas).
 
 ## Architecture and Data Flow
 
